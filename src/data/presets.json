@@ -1,0 +1,84 @@
+{
+  "quality": [
+    { "label": "Standard Quality", "tags": "masterpiece, best quality, ultra high res," },
+    { "label": "RAW Photo", "tags": "RAW photo, photorealistic," },
+    { "label": "Skin Detail", "tags": "detailed skin texture, visible pores, skin fuzz," },
+    { "label": "Depth & Focus", "tags": "detailed shadow, sharp focus, depth of field," }
+  ],
+  "style": [
+    { "label": "Anime Style", "tags": "anime style, cel shading," },
+    { "label": "Oil Painting", "tags": "oil painting, painterly," },
+    { "label": "Watercolor", "tags": "watercolor, soft edges," },
+    { "label": "Cinematic", "tags": "cinematic lighting, film grain, cinematic composition," }
+  ],
+  "face_hair": [
+    { "label": "Brown Hair", "tags": "(brown hair:1.3)," },
+    { "label": "Black Hair", "tags": "(black hair:1.3)," },
+    { "label": "Blonde Hair", "tags": "(blonde hair:1.3)," },
+    { "label": "Silver Hair", "tags": "(silver hair:1.3)," },
+    { "label": "Long Hair", "tags": "long hair," },
+    { "label": "Short Hair", "tags": "short hair," },
+    { "label": "Twintails", "tags": "(low twintails:1.3)," },
+    { "label": "Ponytail", "tags": "(ponytail:1.3)," },
+    { "label": "Bangs", "tags": "bangs," },
+    { "label": "Smile", "tags": "smile, looking at viewer," },
+    { "label": "Serious", "tags": "serious expression, looking at viewer," }
+  ],
+  "body": [
+    { "label": "Petite", "tags": "petite, slim waist, soft body," },
+    { "label": "Model", "tags": "tall girl, slender, slim waist, long legs," },
+    { "label": "Standard", "tags": "slim waist, healthy body," },
+    { "label": "Small Breasts", "tags": "small breasts," },
+    { "label": "Medium Breasts", "tags": "medium breasts," }
+  ],
+  "outfit": [
+    { "label": "School Uniform", "tags": "school uniform, white shirt, plaid skirt," },
+    { "label": "Bikini", "tags": "bikini," },
+    { "label": "Casual", "tags": "casual clothes, t-shirt, jeans," },
+    { "label": "Dress", "tags": "white dress, sundress," }
+  ],
+  "composition": [
+    { "label": "Close-up Upper Body", "tags": "(close-up upper body:1.2)," },
+    { "label": "Full Body", "tags": "full body," },
+    { "label": "Cowboy Shot", "tags": "cowboy shot," },
+    { "label": "Low Angle", "tags": "slight low angle," },
+    { "label": "From Above", "tags": "(from above:1.2)," },
+    { "label": "Peace Sign", "tags": "peace sign," },
+    { "label": "Head Tilt", "tags": "head tilt," },
+    { "label": "Arms Behind Back", "tags": "arms behind back," }
+  ],
+  "effects": [
+    { "label": "Sweat", "tags": "sweat, sweatdrop," },
+    { "label": "Blush", "tags": "blush, embarrassed," },
+    { "label": "Hearts", "tags": "floating hearts," },
+    { "label": "Speed Lines", "tags": "speed lines," }
+  ],
+  "environment": [
+    { "label": "Beach", "tags": "beach, coastline, dark blue sky, cumulonimbus cloud," },
+    { "label": "Indoor Room", "tags": "indoor, bedroom, window, curtains," },
+    { "label": "Urban Street", "tags": "city street, urban, buildings," },
+    { "label": "Natural Sunlight", "tags": "natural sunlight, harsh sunlight, dappled light on skin," },
+    { "label": "Rim Lighting", "tags": "rim lighting, light and shadow on face," },
+    { "label": "Noon", "tags": "noon," },
+    { "label": "Sunset", "tags": "sunset, golden hour," },
+    { "label": "Night", "tags": "night, moonlight," }
+  ],
+  "lora": [],
+  "general_quality": [
+    { "label": "Basic Negative", "tags": "worst quality, low quality, normal quality, blurry, out of focus, jpeg artifacts, lowres, watermark, signature, text, error, cropped, duplicate," }
+  ],
+  "body_anatomy": [
+    { "label": "Anatomy Fix", "tags": "bad anatomy, bad hands, extra fingers, missing fingers, extra limbs, deformed, disfigured, mutated, ugly," }
+  ],
+  "skin_realism": [
+    { "label": "Realism Negative", "tags": "smooth skin, plastic skin, airbrushed skin, cgi, 3d render, illustration, painting, drawing," }
+  ],
+  "lighting": [
+    { "label": "Flat Lighting Fix", "tags": "flat lighting, flat shading," }
+  ],
+  "neg_composition": [
+    { "label": "No Standing", "tags": "standing," },
+    { "label": "No Sitting", "tags": "sitting," },
+    { "label": "No Wide Shot", "tags": "wide shot, distant view, full body landscape," }
+  ]
+}

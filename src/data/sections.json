@@ -1,0 +1,21 @@
+{
+  "positive": [
+    { "key": "quality", "name": "Quality & Technical", "required": true, "defaultOpen": true },
+    { "key": "style", "name": "Style / Aesthetic", "required": false, "defaultOpen": false },
+    { "key": "face_hair", "name": "Face & Hair", "required": true, "defaultOpen": true },
+    { "key": "body", "name": "Body", "required": true, "defaultOpen": true },
+    { "key": "outfit", "name": "Outfit", "required": true, "defaultOpen": true },
+    { "key": "composition", "name": "Composition & Pose", "required": true, "defaultOpen": true },
+    { "key": "effects", "name": "Effects / Expression", "required": false, "defaultOpen": false },
+    { "key": "environment", "name": "Environment & Lighting", "required": true, "defaultOpen": true },
+    { "key": "lora", "name": "Lora", "required": false, "defaultOpen": false }
+  ],
+  "negative": [
+    { "key": "general_quality", "name": "General Quality", "required": true, "defaultOpen": true },
+    { "key": "body_anatomy", "name": "Body & Anatomy", "required": true, "defaultOpen": true },
+    { "key": "skin_realism", "name": "Skin & Realism", "required": true, "defaultOpen": true },
+    { "key": "lighting", "name": "Lighting", "required": true, "defaultOpen": true },
+    { "key": "composition", "name": "Composition (situational)", "required": false, "defaultOpen": true }
+  ],
+  "breakAfter": "effects"
+}
