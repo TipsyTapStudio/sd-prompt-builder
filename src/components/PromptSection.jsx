@@ -33,12 +33,14 @@ function parseBenchItems(text) {
   for (const part of parts) {
     const trimmed = part.trim()
     if (!trimmed) continue
-    if (trimmed.startsWith('//')) {
-      // Strip decorative dashes: "// --- hair color ---" → "hair color"
+    if (trimmed.startsWith('#') && !trimmed.startsWith('##')) {
+      // Group header: "# HAIR" → label "HAIR"
+      const label = trimmed.replace(/^#\s*/, '').trim()
+      items.push({ type: 'comment', text: trimmed, label: label || trimmed, isGroup: true })
+    } else if (trimmed.startsWith('//')) {
+      // Sub-label: "// color" → label "color"
       const label = trimmed.replace(/^\/\/\s*-*\s*/, '').replace(/\s*-*\s*$/, '').trim()
-      // ALL CAPS labels are group headers (e.g. HAIR, FACE)
-      const isGroup = label === label.toUpperCase() && label.length > 0 && /^[A-Z\s]+$/.test(label)
-      items.push({ type: 'comment', text: trimmed, label: label || trimmed, isGroup })
+      items.push({ type: 'comment', text: trimmed, label: label || trimmed, isGroup: false })
     } else {
       items.push({ type: 'tag', text: trimmed })
     }
@@ -84,7 +86,7 @@ function formattedToBenchText(formatted) {
   for (const line of formatted.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed) continue
-    if (trimmed.startsWith('//')) {
+    if (trimmed.startsWith('#') || trimmed.startsWith('//')) {
       parts.push(trimmed)
     } else {
       // Split tags by comma within the line
