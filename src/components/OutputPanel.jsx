@@ -359,7 +359,7 @@ export default function OutputPanel({
 
       {/* Expanded content — Positive and Negative stacked */}
       {isExpanded && (
-        <div className="pb-3 max-h-[60vh] overflow-y-auto">
+        <div className="pb-3">
           {/* Positive */}
           <div className="mb-2">
             <span className="text-[11px] font-medium text-blue-400">Positive</span>
