@@ -270,7 +270,8 @@ export default function PromptAnalysisModal({ onClose, onImport }) {
               <textarea
                 value={importText}
                 onChange={e => { setImportText(e.target.value); setPreview(null) }}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-xs text-gray-300 font-mono leading-relaxed focus:outline-none focus:border-blue-500 resize-none min-h-[150px]"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-xs text-gray-300 font-mono leading-relaxed focus:outline-none focus:border-blue-500 resize-none flex-1"
+                style={{ minHeight: '300px' }}
                 placeholder={"AIの出力をここに貼り付け...\n\n### Quality & Technical\nmasterpiece, best quality, ...\n\n### Face & Hair\n1girl, brown hair, ..."}
                 rows={8}
               />
