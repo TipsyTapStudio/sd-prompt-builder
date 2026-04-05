@@ -417,7 +417,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
               </div>
               {/* Translation (Positive only) */}
               {translatedText && (
-                <div className="mt-0.5 px-3 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
+                <div className="mt-0.5 px-3 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap italic">
                   {translatedText}
                 </div>
               )}
