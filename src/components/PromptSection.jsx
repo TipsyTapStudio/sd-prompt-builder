@@ -416,6 +416,11 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                 </span>
               </div>
               {/* Translation (Positive only) */}
+              {translator?.error && type === 'positive' && (
+                <div className="mt-0.5 px-3 text-[10px] text-red-400/70 font-mono">
+                  翻訳エラー: {translator.error}
+                </div>
+              )}
               {translatedText && (
                 <div className="mt-0.5 px-3 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
                   {translatedText}

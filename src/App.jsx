@@ -56,7 +56,7 @@ function TitleMenu({ title, description, onTitleChange, onDescriptionChange,
         <button onClick={() => { onRevert(); onClose() }}
           disabled={!canRevert}
           className={`w-full text-left px-3 py-1.5 text-xs cursor-pointer ${
-            canRevert ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 cursor-default'
+            canRevert ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-600 cursor-default'
           }`}>
           変更を元に戻す
         </button>
@@ -68,12 +68,12 @@ function TitleMenu({ title, description, onTitleChange, onDescriptionChange,
         {(createdAt || lastSavedAt) && (
           <div className="px-3 pt-1.5 space-y-0.5">
             {createdAt && (
-              <div className="text-[10px] text-gray-600">
+              <div className="text-[11px] text-gray-400">
                 作成: {new Date(createdAt).toLocaleString('ja-JP')}
               </div>
             )}
             {lastSavedAt && (
-              <div className="text-[10px] text-gray-600">
+              <div className="text-[11px] text-gray-400">
                 更新: {new Date(lastSavedAt).toLocaleString('ja-JP')}
               </div>
             )}
