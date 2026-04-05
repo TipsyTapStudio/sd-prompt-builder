@@ -1,56 +1,42 @@
 {
   "quality": [
-    { "label": "Standard Quality", "tags": "masterpiece, best quality, ultra high res," },
-    { "label": "RAW Photo", "tags": "RAW photo, photorealistic," },
-    { "label": "Skin Detail", "tags": "detailed skin texture, visible pores, skin fuzz," },
-    { "label": "Depth & Focus", "tags": "detailed shadow, sharp focus, depth of field," }
+    { "label": "Quality & Technical", "tags": "// --- quality ---, masterpiece, best quality, ultra high res, // --- photo ---, RAW photo, photorealistic, // --- skin ---, detailed skin texture, visible pores, skin fuzz, // --- focus ---, detailed shadow, sharp focus, depth of field," }
   ],
   "style": [
-    { "label": "Anime Style", "tags": "anime style, cel shading," },
-    { "label": "Oil Painting", "tags": "oil painting, painterly," },
-    { "label": "Watercolor", "tags": "watercolor, soft edges," },
-    { "label": "Cinematic", "tags": "cinematic lighting, film grain, cinematic composition," }
+    { "label": "Style / Aesthetic", "tags": "// --- illustration ---, anime style, cel shading, oil painting, painterly, watercolor, soft edges, // --- photo style ---, cinematic lighting, film grain, cinematic composition, // --- palette ---, pastel palette, soft coloring, vivid colors, muted tones," }
   ],
   "face_hair": [
-    { "label": "Brown Hair", "tags": "// --- hair color ---, (brown hair:1.3), (black hair:1.3), (blonde hair:1.3), (silver hair:1.3), // --- hair style ---, long hair, short hair, (low twintails:1.3), (ponytail:1.3), bangs, // --- expression ---, smile, serious expression, looking at viewer," }
+    { "label": "Face & Hair", "tags": "// --- hair color ---, (brown hair:1.3), (black hair:1.3), (blonde hair:1.3), (silver hair:1.3), (red hair:1.3), (pink hair:1.3), // --- hair length ---, long hair, medium hair, short hair, // --- hair style ---, (low twintails:1.3), (ponytail:1.3), (side braid:1.2), bun, messy hair, bangs, side bangs, // --- face / expression ---, smile, gentle smile, grin, serious expression, crying, blush, // --- eyes ---, looking at viewer, looking away, closed eyes, heterochromia," }
   ],
   "body": [
-    { "label": "Petite", "tags": "// --- build ---, petite, slim waist, soft body, // --- height ---, tall girl, slender, long legs, // --- chest ---, small breasts, medium breasts," }
+    { "label": "Body", "tags": "// --- build ---, petite, slim waist, soft body, healthy body, athletic, // --- height ---, tall girl, slender, long legs, short, // --- chest ---, flat chest, small breasts, medium breasts, large breasts, // --- skin ---, tan, pale skin, wet skin, sweat," }
   ],
   "outfit": [
-    { "label": "School Uniform", "tags": "school uniform, white shirt, plaid skirt," },
-    { "label": "Bikini", "tags": "bikini," },
-    { "label": "Casual", "tags": "casual clothes, t-shirt, jeans," },
-    { "label": "Dress", "tags": "white dress, sundress," }
+    { "label": "Outfit", "tags": "// --- tops ---, white shirt, blouse, t-shirt, tank top, crop top, sweater, hoodie, // --- bottoms ---, skirt, plaid skirt, long skirt, jeans, shorts, // --- dress ---, dress, sundress, white dress, evening gown, // --- swimwear ---, bikini, one-piece swimsuit, // --- uniform ---, school uniform, maid outfit, nurse outfit, // --- accessories ---, ribbon, choker, earrings, glasses, hat, hairband," }
   ],
   "composition": [
-    { "label": "Framing & Angle", "tags": "// --- framing ---, (close-up upper body:1.2), full body, cowboy shot, // --- angle ---, slight low angle, (from above:1.2), // --- pose ---, peace sign, head tilt, arms behind back," }
+    { "label": "Composition & Pose", "tags": "// --- framing ---, (close-up upper body:1.2), upper body, cowboy shot, full body, portrait, // --- angle ---, front view, slight low angle, (from above:1.2), (from below:1.2), from side, dutch angle, // --- pose ---, standing, sitting, lying down, peace sign, head tilt, arms behind back, hand on hip, leaning forward," }
   ],
   "effects": [
-    { "label": "Sweat", "tags": "sweat, sweatdrop," },
-    { "label": "Blush", "tags": "blush, embarrassed," },
-    { "label": "Hearts", "tags": "floating hearts," },
-    { "label": "Speed Lines", "tags": "speed lines," }
+    { "label": "Effects / Expression", "tags": "// --- emotion ---, blush, embarrassed, sweat, sweatdrop, crying, tears, // --- manga ---, floating hearts, speed lines, sparkles, motion blur, // --- atmosphere ---, steam, light particles, lens flare," }
   ],
   "environment": [
-    { "label": "Scene & Light", "tags": "// --- scene ---, beach, coastline, dark blue sky, cumulonimbus cloud, indoor, bedroom, window, curtains, city street, urban, buildings, // --- lighting ---, natural sunlight, harsh sunlight, dappled light on skin, rim lighting, light and shadow on face, // --- time ---, noon, sunset, golden hour, night, moonlight," }
+    { "label": "Environment & Lighting", "tags": "// --- outdoor ---, beach, coastline, park, garden, forest, mountain, rooftop, // --- indoor ---, bedroom, living room, classroom, cafe, bathroom, // --- urban ---, city street, urban, buildings, alley, // --- sky ---, blue sky, dark blue sky, cumulonimbus cloud, starry sky, // --- lighting ---, natural sunlight, harsh sunlight, dappled light on skin, rim lighting, light and shadow on face, soft lighting, dramatic lighting, backlighting, // --- time ---, morning, noon, sunset, golden hour, night, moonlight," }
   ],
   "lora": [],
   "general_quality": [
-    { "label": "Basic Negative", "tags": "worst quality, low quality, normal quality, blurry, out of focus, jpeg artifacts, lowres, watermark, signature, text, error, cropped, duplicate," }
+    { "label": "General Quality", "tags": "// --- quality ---, worst quality, low quality, normal quality, // --- artifact ---, blurry, out of focus, jpeg artifacts, lowres, // --- watermark ---, watermark, signature, text, error, cropped, duplicate," }
   ],
   "body_anatomy": [
-    { "label": "Anatomy Fix", "tags": "bad anatomy, bad hands, extra fingers, missing fingers, extra limbs, deformed, disfigured, mutated, ugly," }
+    { "label": "Body & Anatomy", "tags": "// --- anatomy ---, bad anatomy, bad proportions, // --- hands ---, bad hands, extra fingers, missing fingers, fused fingers, // --- limbs ---, extra limbs, missing limbs, extra arms, extra legs, // --- deformation ---, deformed, disfigured, mutated, ugly," }
   ],
   "skin_realism": [
-    { "label": "Realism Negative", "tags": "smooth skin, plastic skin, airbrushed skin, cgi, 3d render, illustration, painting, drawing," }
+    { "label": "Skin & Realism", "tags": "// --- skin ---, smooth skin, plastic skin, airbrushed skin, // --- style exclusion ---, cgi, 3d render, illustration, painting, drawing, cartoon, anime," }
   ],
   "lighting": [
-    { "label": "Flat Lighting Fix", "tags": "flat lighting, flat shading," }
+    { "label": "Lighting", "tags": "// --- flat ---, flat lighting, flat shading, // --- overexposure ---, overexposed, underexposed," }
   ],
   "neg_composition": [
-    { "label": "No Standing", "tags": "standing," },
-    { "label": "No Sitting", "tags": "sitting," },
-    { "label": "No Wide Shot", "tags": "wide shot, distant view, full body landscape," }
+    { "label": "Composition (situational)", "tags": "// --- pose exclusion ---, standing, sitting, lying down, // --- framing exclusion ---, wide shot, distant view, full body landscape, close-up, cropped," }
   ]
 }
