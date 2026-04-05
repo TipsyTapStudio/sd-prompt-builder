@@ -170,6 +170,7 @@ export default function PromptAnalysisModal({ onClose, onImport }) {
   const [copied, setCopied] = useState(false)
   const [importText, setImportText] = useState('')
   const [preview, setPreview] = useState(null)
+  const [parseError, setParseError] = useState(null)
 
   const handleCopy = useCallback(async () => {
     try {
@@ -190,7 +191,15 @@ export default function PromptAnalysisModal({ onClose, onImport }) {
 
   const handleParse = useCallback(() => {
     if (!importText.trim()) return
+    setParseError(null)
     const result = parseAIOutput(importText)
+    const hasPositive = Object.keys(result.sections).length > 0
+    const hasNegative = Object.keys(result.negativeSections).length > 0
+    if (!hasPositive && !hasNegative) {
+      setParseError('解析可能なセクションが見つかりませんでした。「### セクション名」形式のヘッダーを含むテキストを貼り付けてください。')
+      setPreview(null)
+      return
+    }
     setPreview(result)
   }, [importText])
 
@@ -269,12 +278,18 @@ export default function PromptAnalysisModal({ onClose, onImport }) {
             <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
               <textarea
                 value={importText}
-                onChange={e => { setImportText(e.target.value); setPreview(null) }}
+                onChange={e => { setImportText(e.target.value); setPreview(null); setParseError(null) }}
                 className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-xs text-gray-300 font-mono leading-relaxed focus:outline-none focus:border-blue-500 resize-none flex-1"
                 style={{ minHeight: '300px' }}
                 placeholder={"AIの出力をここに貼り付け...\n\n### Quality & Technical\nmasterpiece, best quality, ...\n\n### Face & Hair\n1girl, brown hair, ..."}
                 rows={8}
               />
+
+              {parseError && (
+                <div className="bg-red-950/30 border border-red-800/50 rounded-lg p-3">
+                  <div className="text-[11px] text-red-400">{parseError}</div>
+                </div>
+              )}
 
               {preview && (
                 <div className="bg-gray-950/50 border border-gray-800 rounded-lg p-3">
@@ -311,7 +326,7 @@ export default function PromptAnalysisModal({ onClose, onImport }) {
             <div className="px-5 py-3 border-t border-gray-800 flex justify-end gap-2">
               <button onClick={handleParse} disabled={!importText.trim()}
                 className="px-4 py-2 text-xs font-medium rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default">
-                解析
+                {preview ? '✓ プレビュー済み' : 'プレビュー'}
               </button>
               <button onClick={handleApply} disabled={!preview}
                 className="px-4 py-2 text-xs font-medium rounded-lg bg-blue-600/80 hover:bg-blue-500/80 text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default">
