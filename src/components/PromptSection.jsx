@@ -49,10 +49,55 @@ function benchItemsToText(items) {
   return items.map(it => it.text).join(', ')
 }
 
+/** Convert flat comma-separated bench text to formatted multi-line for editing */
+function benchTextToFormatted(text) {
+  if (!text || !text.trim()) return ''
+  const items = parseBenchItems(text)
+  const lines = []
+  let currentTags = []
+
+  for (const item of items) {
+    if (item.type === 'comment') {
+      // Flush accumulated tags before the label
+      if (currentTags.length > 0) {
+        lines.push(currentTags.join(', '))
+        currentTags = []
+      }
+      lines.push(item.text)
+    } else {
+      currentTags.push(item.text)
+    }
+  }
+  // Flush remaining tags
+  if (currentTags.length > 0) {
+    lines.push(currentTags.join(', '))
+  }
+  return lines.join('\n')
+}
+
+/** Convert formatted multi-line text back to flat comma-separated */
+function formattedToBenchText(formatted) {
+  if (!formatted || !formatted.trim()) return ''
+  const parts = []
+  for (const line of formatted.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (trimmed.startsWith('//')) {
+      parts.push(trimmed)
+    } else {
+      // Split tags by comma within the line
+      const tags = trimmed.split(',').map(t => t.trim()).filter(Boolean)
+      parts.push(...tags)
+    }
+  }
+  return parts.join(', ')
+}
+
 export default function PromptSection({ section, value, onChange, type, benchValue, onBenchChange }) {
   const [isOpen, setIsOpen] = useState(section.defaultOpen)
   const [benchOpen, setBenchOpen] = useState(true)
   const [benchEditMode, setBenchEditMode] = useState(false)
+  const [benchEditText, setBenchEditText] = useState('')
   const [selectedChips, setSelectedChips] = useState(new Set())
   const [dragIndex, setDragIndex] = useState(null)
   const [dividerWidth, setDividerWidth] = useState(72) // left pane percentage
@@ -403,14 +448,18 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   <div className="mt-1">
                     <textarea
                       ref={benchRef}
-                      value={effectiveBench}
-                      onChange={e => onBenchChange(section.key, e.target.value)}
-                      className="w-full bg-gray-800/50 border border-gray-700/50 rounded px-2 py-1 text-xs text-gray-500 placeholder-gray-700 focus:outline-none focus:border-gray-600 resize-none font-mono leading-relaxed"
-                      placeholder="Tags..., // comment as separator"
-                      rows={3}
+                      value={benchEditText}
+                      onChange={e => setBenchEditText(e.target.value)}
+                      className="w-full bg-gray-800/50 border border-gray-700/50 rounded px-2 py-1 text-xs text-gray-500 placeholder-gray-700 focus:outline-none focus:border-gray-600 font-mono leading-relaxed"
+                      style={{ resize: 'vertical', overflow: 'hidden' }}
+                      placeholder={"// label\ntag1, tag2, tag3\n// label\ntag4, tag5"}
+                      rows={5}
                     />
                     <button
-                      onClick={() => setBenchEditMode(false)}
+                      onClick={() => {
+                        onBenchChange(section.key, formattedToBenchText(benchEditText))
+                        setBenchEditMode(false)
+                      }}
                       className="text-[10px] text-gray-500 hover:text-gray-300 mt-0.5 cursor-pointer"
                     >
                       閉じる
@@ -418,7 +467,10 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   </div>
                 ) : (
                   <button
-                    onClick={() => setBenchEditMode(true)}
+                    onClick={() => {
+                      setBenchEditText(benchTextToFormatted(effectiveBench))
+                      setBenchEditMode(true)
+                    }}
                     className="mt-1 text-[10px] text-gray-600 hover:text-gray-400 cursor-pointer text-left"
                     title="ベンチを編集"
                   >
