@@ -26,7 +26,7 @@ const createEmptyNegativeSections = () => {
  * Title dropdown menu
  */
 function TitleMenu({ title, description, onTitleChange, onDescriptionChange,
-  onExportMarkdown, onDelete, onCopyAsNew, onRevert, canRevert, lastSavedAt, onClose }) {
+  onExportMarkdown, onDelete, onCopyAsNew, onRevert, canRevert, createdAt, lastSavedAt, onClose }) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
@@ -65,9 +65,18 @@ function TitleMenu({ title, description, onTitleChange, onDescriptionChange,
           className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-gray-700 cursor-pointer">
           削除
         </button>
-        {lastSavedAt && (
-          <div className="px-3 pt-1.5 text-[10px] text-gray-600">
-            最終保存: {new Date(lastSavedAt).toLocaleString('ja-JP')}
+        {(createdAt || lastSavedAt) && (
+          <div className="px-3 pt-1.5 space-y-0.5">
+            {createdAt && (
+              <div className="text-[10px] text-gray-600">
+                作成: {new Date(createdAt).toLocaleString('ja-JP')}
+              </div>
+            )}
+            {lastSavedAt && (
+              <div className="text-[10px] text-gray-600">
+                更新: {new Date(lastSavedAt).toLocaleString('ja-JP')}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -231,6 +240,18 @@ export default function App() {
     // Next save will create a new prompt
   }
 
+  // Duplicate a prompt from sidebar (open as new copy)
+  const handleDuplicate = (prompt) => {
+    setTitle(`${prompt.title || '無題'} のコピー`)
+    setDescription(prompt.description || '')
+    setSections({ ...createEmptySections(), ...prompt.sections })
+    setNegativeSections({ ...createEmptyNegativeSections(), ...prompt.negative_sections })
+    setCurrentId(null) // new prompt
+    setLastSavedSnapshot(null)
+    if (prompt.bench) loadBench(prompt.bench)
+    clearDraft()
+  }
+
   const handleRevert = () => {
     if (!lastSavedSnapshot) return
     if (!window.confirm('最後に保存した状態に戻しますか？')) return
@@ -277,7 +298,7 @@ export default function App() {
         <div style={{ width: SIDEBAR_WIDTH }} className="h-full">
           <Sidebar
             prompts={prompts} currentId={currentId}
-            onLoad={handleLoad} onNew={handleNew} onDelete={deletePrompt}
+            onLoad={handleLoad} onDuplicate={handleDuplicate} onNew={handleNew} onDelete={deletePrompt}
             onExportJson={exportToJson} onExportMarkdown={exportToMarkdown} onImportJson={importFromJson}
             onResetBench={handleResetBench} onClearAll={handleClearAll}
             translationProvider={translationProvider}
@@ -323,6 +344,7 @@ export default function App() {
                     onCopyAsNew={handleCopyAsNew}
                     onRevert={handleRevert}
                     canRevert={isDirty}
+                    createdAt={lastSavedSnapshot?.created_at}
                     lastSavedAt={lastSavedSnapshot?.updated_at}
                     onClose={() => setTitleMenuOpen(false)}
                   />

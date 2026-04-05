@@ -81,7 +81,7 @@ function PromptContextMenu({ prompt, position, onClose, onExportMarkdown, onDele
 }
 
 export default function Sidebar({
-  prompts, currentId, onLoad, onNew, onDelete,
+  prompts, currentId, onLoad, onDuplicate, onNew, onDelete,
   onExportJson, onExportMarkdown, onImportJson,
   onResetBench, onClearAll,
   translationProvider, onSetTranslationProvider, PROVIDERS,
@@ -178,8 +178,16 @@ export default function Sidebar({
                         currentId === prompt.id ? 'text-gray-100' : 'text-gray-400'
                       }`}>{prompt.title || 'Untitled'}</div>
                     </div>
+                    <button onClick={(e) => { e.stopPropagation(); onDuplicate(prompt) }}
+                      className="flex-shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-gray-300 cursor-pointer"
+                      title="複製して開く">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                        <rect x="5" y="5" width="9" height="9" rx="1" />
+                        <path d="M11 5V3a1 1 0 00-1-1H3a1 1 0 00-1 1v7a1 1 0 001 1h2" />
+                      </svg>
+                    </button>
                     <button onClick={(e) => handleDotsClick(e, prompt)}
-                      className="flex-shrink-0 ml-1 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-gray-300 cursor-pointer">
+                      className="flex-shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-gray-300 cursor-pointer">
                       <DotsIcon size={12} />
                     </button>
                   </div>
