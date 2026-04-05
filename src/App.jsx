@@ -1,11 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import sectionsData from './data/sections.json'
 import PromptSection from './components/PromptSection'
 import BreakDivider from './components/BreakDivider'
 import OutputPanel from './components/OutputPanel'
 import Sidebar, { SidebarIcon } from './components/Sidebar'
 import { usePromptBuilder } from './hooks/usePromptBuilder'
-import { useStorage } from './hooks/useStorage'
+import { useStorage, saveDraft, loadDraft, clearDraft } from './hooks/useStorage'
 import { useTranslator, PROVIDERS } from './hooks/useTranslator'
 
 const SIDEBAR_WIDTH = 260
@@ -23,9 +23,10 @@ const createEmptyNegativeSections = () => {
 }
 
 /**
- * Title dropdown menu — edit title/description, MD export, delete
+ * Title dropdown menu
  */
-function TitleMenu({ title, description, onTitleChange, onDescriptionChange, onExportMarkdown, onDelete, onClose }) {
+function TitleMenu({ title, description, onTitleChange, onDescriptionChange,
+  onExportMarkdown, onDelete, onCopyAsNew, onRevert, canRevert, lastSavedAt, onClose }) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
@@ -43,15 +44,32 @@ function TitleMenu({ title, description, onTitleChange, onDescriptionChange, onE
             placeholder="メモ・コンテキスト" />
         </div>
         <div className="border-t border-gray-700 my-1" />
+        <button onClick={() => { onCopyAsNew(); onClose() }}
+          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer">
+          コピーとして保存
+        </button>
         <button onClick={() => { onExportMarkdown(); onClose() }}
           className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer">
           Markdown保存
+        </button>
+        <div className="border-t border-gray-700 my-1" />
+        <button onClick={() => { onRevert(); onClose() }}
+          disabled={!canRevert}
+          className={`w-full text-left px-3 py-1.5 text-xs cursor-pointer ${
+            canRevert ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 cursor-default'
+          }`}>
+          変更を元に戻す
         </button>
         <div className="border-t border-gray-700 my-1" />
         <button onClick={() => { onDelete(); onClose() }}
           className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-gray-700 cursor-pointer">
           削除
         </button>
+        {lastSavedAt && (
+          <div className="px-3 pt-1.5 text-[10px] text-gray-600">
+            最終保存: {new Date(lastSavedAt).toLocaleString('ja-JP')}
+          </div>
+        )}
       </div>
     </>
   )
@@ -68,6 +86,163 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [titleMenuOpen, setTitleMenuOpen] = useState(false)
   const [translationProvider, setTranslationProvider] = useState(PROVIDERS.MYMEMORY)
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState(null) // snapshot of last saved state
+  const [saveFlash, setSaveFlash] = useState(false) // brief "saved" feedback
+
+  const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
+  const translator = useTranslator(translationProvider)
+  const {
+    prompts, savePrompt, loadPrompt, deletePrompt,
+    exportToJson, exportToMarkdown, importFromJson,
+    bench, updateBench, loadBench,
+    getFirstSamplePrompt,
+  } = useStorage()
+
+  // --- Draft auto-save (debounce 1.5s) ---
+  const draftTimerRef = useRef(null)
+  useEffect(() => {
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    draftTimerRef.current = setTimeout(() => {
+      saveDraft({ title, description, sections, negativeSections, currentId, bench })
+    }, 1500)
+    return () => { if (draftTimerRef.current) clearTimeout(draftTimerRef.current) }
+  }, [title, description, sections, negativeSections, currentId, bench])
+
+  // Save draft immediately on page unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      saveDraft({ title, description, sections, negativeSections, currentId, bench })
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [title, description, sections, negativeSections, currentId, bench])
+
+  // --- Initial load: Draft > Sample ---
+  useEffect(() => {
+    const draft = loadDraft()
+    if (draft && (draft.title || Object.values(draft.sections || {}).some(v => v?.trim()))) {
+      setTitle(draft.title || '')
+      setDescription(draft.description || '')
+      setSections(prev => ({ ...prev, ...(draft.sections || {}) }))
+      setNegativeSections(prev => ({ ...prev, ...(draft.negativeSections || {}) }))
+      setCurrentId(draft.currentId || null)
+      if (draft.bench) loadBench(draft.bench)
+      // Set snapshot if loading an existing prompt
+      if (draft.currentId) {
+        const saved = prompts.find(p => p.id === draft.currentId)
+        if (saved) setLastSavedSnapshot(saved)
+      }
+      return
+    }
+    // Fallback: load sample
+    const sample = getFirstSamplePrompt()
+    if (sample) {
+      setTitle(sample.title || '')
+      setDescription(sample.description || '')
+      setSections(prev => ({ ...prev, ...sample.sections }))
+      setNegativeSections(prev => ({ ...prev, ...sample.negative_sections }))
+      setCurrentId(sample.id)
+      setLastSavedSnapshot(sample)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- isDirty: compare current state with last saved ---
+  const isDirty = useMemo(() => {
+    if (!currentId || !lastSavedSnapshot) return false
+    const snap = lastSavedSnapshot
+    if (title !== (snap.title || '')) return true
+    if (description !== (snap.description || '')) return true
+    for (const s of sectionsData.positive) {
+      if ((sections[s.key] || '') !== (snap.sections?.[s.key] || '')) return true
+    }
+    for (const s of sectionsData.negative) {
+      if ((negativeSections[s.key] || '') !== (snap.negative_sections?.[s.key] || '')) return true
+    }
+    return false
+  }, [title, description, sections, negativeSections, currentId, lastSavedSnapshot])
+
+  const isNewPrompt = !currentId
+
+  // --- Handlers ---
+  const updateSection = useCallback((key, value) => {
+    setSections(prev => ({ ...prev, [key]: value }))
+  }, [])
+
+  const updateNegativeSection = useCallback((key, value) => {
+    setNegativeSections(prev => ({ ...prev, [key]: value }))
+  }, [])
+
+  const handleSave = () => {
+    if (!title.trim()) {
+      setTitleMenuOpen(true)
+      return
+    }
+    const data = {
+      id: currentId,
+      title, description, sections,
+      negative_sections: negativeSections,
+    }
+    const id = savePrompt(data)
+    setCurrentId(id)
+    // Update snapshot
+    setLastSavedSnapshot({
+      ...data, id,
+      title, description, sections, negative_sections: negativeSections,
+      updated_at: new Date().toISOString(),
+    })
+    // Flash feedback
+    setSaveFlash(true)
+    setTimeout(() => setSaveFlash(false), 2000)
+  }
+
+  const handleLoad = (prompt) => {
+    setTitle(prompt.title || '')
+    setDescription(prompt.description || '')
+    setSections({ ...createEmptySections(), ...prompt.sections })
+    setNegativeSections({ ...createEmptyNegativeSections(), ...prompt.negative_sections })
+    setCurrentId(prompt.id)
+    setLastSavedSnapshot(prompt)
+    if (prompt.bench) loadBench(prompt.bench)
+    clearDraft()
+  }
+
+  const handleNew = () => {
+    setTitle('')
+    setDescription('')
+    setSections(createEmptySections())
+    setNegativeSections(createEmptyNegativeSections())
+    setCurrentId(null)
+    setLastSavedSnapshot(null)
+    clearDraft()
+  }
+
+  const handleDeleteCurrent = () => {
+    if (!currentId) return
+    if (!window.confirm(`「${title}」を削除しますか？`)) return
+    deletePrompt(currentId)
+    handleNew()
+  }
+
+  const handleCopyAsNew = () => {
+    const newTitle = `${title || '無題'} のコピー`
+    setTitle(newTitle)
+    setCurrentId(null) // detach from original
+    setLastSavedSnapshot(null)
+    // Next save will create a new prompt
+  }
+
+  const handleRevert = () => {
+    if (!lastSavedSnapshot) return
+    if (!window.confirm('最後に保存した状態に戻しますか？')) return
+    handleLoad(lastSavedSnapshot)
+  }
+
+  const handleExportCurrentMd = () => {
+    exportToMarkdown({
+      id: currentId, title, description,
+      sections, negative_sections: negativeSections, bench,
+    })
+  }
 
   const handleResetBench = () => {
     if (!window.confirm('ベンチデータをプリセットの初期状態にリセットしますか？')) return
@@ -79,97 +254,20 @@ export default function App() {
     localStorage.removeItem('sd-prompt-builder:prompts')
     localStorage.removeItem('sd-prompt-builder:bench')
     localStorage.removeItem('sd-prompt-builder:settings')
+    localStorage.removeItem('sd-prompt-builder:draft')
     window.location.reload()
   }
 
-  const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
-  const translator = useTranslator(translationProvider)
-  const {
-    prompts, savePrompt, loadPrompt, deletePrompt,
-    exportToJson, exportToMarkdown, importFromJson,
-    bench, updateBench, loadBench,
-    getFirstSamplePrompt,
-  } = useStorage()
-
-  // Auto-load first sample prompt on initial launch
-  useEffect(() => {
-    const hasAnyContent = Object.values(sections).some(v => v.trim()) ||
-      Object.values(negativeSections).some(v => v.trim())
-    if (!hasAnyContent && !currentId) {
-      const sample = getFirstSamplePrompt()
-      if (sample) {
-        setTitle(sample.title || '')
-        setDescription(sample.description || '')
-        setSections(prev => ({ ...prev, ...sample.sections }))
-        setNegativeSections(prev => ({ ...prev, ...sample.negative_sections }))
-        setCurrentId(sample.id)
-      }
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  const updateSection = useCallback((key, value) => {
-    setSections(prev => ({ ...prev, [key]: value }))
-  }, [])
-
-  const updateNegativeSection = useCallback((key, value) => {
-    setNegativeSections(prev => ({ ...prev, [key]: value }))
-  }, [])
-
-  const handleSave = () => {
-    if (!title.trim()) {
-      setTitleMenuOpen(true) // Open title menu to prompt user to enter title
-      return
-    }
-    const id = savePrompt({
-      id: currentId,
-      title,
-      description,
-      sections,
-      negative_sections: negativeSections,
-    })
-    setCurrentId(id)
-  }
-
-  const handleLoad = (prompt) => {
-    const hasContent = Object.values(sections).some(v => v.trim()) ||
-      Object.values(negativeSections).some(v => v.trim())
-    if (hasContent && !window.confirm('現在の入力内容を上書きしますか？')) return
-
-    setTitle(prompt.title || '')
-    setDescription(prompt.description || '')
-    setSections({ ...createEmptySections(), ...prompt.sections })
-    setNegativeSections({ ...createEmptyNegativeSections(), ...prompt.negative_sections })
-    setCurrentId(prompt.id)
-    if (prompt.bench) loadBench(prompt.bench)
-  }
-
-  const handleNew = () => {
-    const hasContent = Object.values(sections).some(v => v.trim()) ||
-      Object.values(negativeSections).some(v => v.trim())
-    if (hasContent && !window.confirm('現在の入力内容をクリアしますか？')) return
-
-    setTitle('')
-    setDescription('')
-    setSections(createEmptySections())
-    setNegativeSections(createEmptyNegativeSections())
-    setCurrentId(null)
-  }
-
-  const handleDeleteCurrent = () => {
-    if (!currentId) return
-    if (!window.confirm(`「${title}」を削除しますか？`)) return
-    deletePrompt(currentId)
-    handleNew()
-  }
-
-  const handleExportCurrentMd = () => {
-    exportToMarkdown({
-      id: currentId, title, description,
-      sections, negative_sections: negativeSections, bench,
-    })
-  }
-
   const displayTitle = title || '無題のプロンプト'
+
+  // Save button label & style
+  const saveButtonLabel = saveFlash ? '✓ 保存済み' : isNewPrompt ? '保存する' : isDirty ? '変更を保存' : '✓ 保存済み'
+  const saveButtonActive = isNewPrompt || isDirty
+  const saveButtonClass = saveFlash
+    ? 'bg-green-600/80 text-white'
+    : saveButtonActive
+      ? 'bg-blue-600 hover:bg-blue-500 text-white'
+      : 'bg-transparent text-gray-500'
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 flex">
@@ -195,7 +293,6 @@ export default function App() {
         {/* Header */}
         <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
           <div className="px-4 py-2 flex items-center justify-between">
-            {/* Left: sidebar toggle + title */}
             <div className="flex items-center gap-2 min-w-0">
               {!sidebarOpen && (
                 <button onClick={() => setSidebarOpen(true)}
@@ -207,13 +304,14 @@ export default function App() {
               {!sidebarOpen && (
                 <span className="text-[11px] text-gray-500 flex-shrink-0 mr-1">SD Prompt Builder</span>
               )}
-              {/* Title with dropdown */}
+              {/* Title dropdown */}
               <div className="relative min-w-0">
                 <button onClick={() => setTitleMenuOpen(!titleMenuOpen)}
                   className="flex items-center gap-1 min-w-0 px-2 py-0.5 rounded hover:bg-gray-800 transition-colors cursor-pointer">
                   <span className={`text-sm truncate ${title ? 'text-gray-200' : 'text-gray-500'}`}>
                     {displayTitle}
                   </span>
+                  {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" title="未保存の変更あり" />}
                   <span className="text-gray-500 text-xs flex-shrink-0">▼</span>
                 </button>
                 {titleMenuOpen && (
@@ -222,12 +320,16 @@ export default function App() {
                     onTitleChange={setTitle} onDescriptionChange={setDescription}
                     onExportMarkdown={handleExportCurrentMd}
                     onDelete={handleDeleteCurrent}
+                    onCopyAsNew={handleCopyAsNew}
+                    onRevert={handleRevert}
+                    canRevert={isDirty}
+                    lastSavedAt={lastSavedSnapshot?.updated_at}
                     onClose={() => setTitleMenuOpen(false)}
                   />
                 )}
               </div>
             </div>
-            {/* Right: translation toggle + save */}
+            {/* Right: translation + save */}
             <div className="flex items-center gap-2 flex-shrink-0">
               <button onClick={() => setTranslationProvider(prev =>
                 prev === PROVIDERS.OFF ? PROVIDERS.MYMEMORY : PROVIDERS.OFF
@@ -237,66 +339,50 @@ export default function App() {
                     ? 'text-blue-400 hover:text-blue-300 bg-blue-600/10'
                     : 'text-gray-500 hover:text-gray-400'
                 }`}
-                title={translationProvider !== PROVIDERS.OFF ? '翻訳ON（クリックでOFF）' : '翻訳OFF（クリックでON）'}>
+                title={translationProvider !== PROVIDERS.OFF ? '翻訳ON' : '翻訳OFF'}>
                 訳
               </button>
-              <button onClick={handleSave}
-                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors cursor-pointer">
-                保存
+              <button onClick={saveButtonActive ? handleSave : undefined}
+                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${saveButtonClass} ${
+                  saveButtonActive ? 'cursor-pointer' : 'cursor-default'
+                }`}>
+                {saveButtonLabel}
               </button>
             </div>
           </div>
         </div>
 
         <div className="max-w-5xl mx-auto px-4 pt-4">
-          {/* Positive Sections */}
           <h2 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Positive</h2>
-
           {sectionsData.positive.map((section) => (
             <div key={section.key}>
-              <PromptSection
-                section={section}
-                value={sections[section.key] || ''}
-                onChange={(val) => updateSection(section.key, val)}
-                type="positive"
-                benchValue={bench[section.key]}
-                onBenchChange={updateBench}
-                translator={translator}
-              />
+              <PromptSection section={section} value={sections[section.key] || ''}
+                onChange={(val) => updateSection(section.key, val)} type="positive"
+                benchValue={bench[section.key]} onBenchChange={updateBench} translator={translator} />
               {section.key === sectionsData.breakAfter && <BreakDivider />}
             </div>
           ))}
 
-          {/* Negative Sections */}
           <h2 className="text-xs font-semibold text-red-400 uppercase tracking-wider mt-4 mb-2">Negative</h2>
-
           {sectionsData.negative.map((section) => {
             const benchKey = section.key === 'composition' ? 'neg_composition' : section.key
             return (
-              <PromptSection
-                key={section.key}
-                section={section}
+              <PromptSection key={section.key} section={section}
                 value={negativeSections[section.key] || ''}
-                onChange={(val) => updateNegativeSection(section.key, val)}
-                type="negative"
+                onChange={(val) => updateNegativeSection(section.key, val)} type="negative"
                 benchValue={bench[benchKey]}
-                onBenchChange={(_sectionKey, val) => { updateBench(benchKey, val) }}
-              />
+                onBenchChange={(_sectionKey, val) => { updateBench(benchKey, val) }} />
             )
           })}
         </div>
 
-        {/* Output Panel */}
         <div className="max-w-5xl mx-auto px-4">
           <OutputPanel
             positivePrompt={positivePrompt} negativePrompt={negativePrompt}
-            includeHeaders={includeHeaders}
-            onToggleHeaders={() => setIncludeHeaders(prev => !prev)}
-            includeComments={includeComments}
-            onToggleComments={() => setIncludeComments(prev => !prev)}
+            includeHeaders={includeHeaders} onToggleHeaders={() => setIncludeHeaders(prev => !prev)}
+            includeComments={includeComments} onToggleComments={() => setIncludeComments(prev => !prev)}
             sections={sections} negativeSections={negativeSections}
-            onSectionsUpdate={setSections} onNegativeSectionsUpdate={setNegativeSections}
-          />
+            onSectionsUpdate={setSections} onNegativeSectionsUpdate={setNegativeSections} />
         </div>
       </div>
     </div>

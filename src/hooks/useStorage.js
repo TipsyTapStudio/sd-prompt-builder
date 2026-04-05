@@ -4,6 +4,27 @@ import sectionsData from '../data/sections.json'
 
 const STORAGE_KEY = 'sd-prompt-builder:prompts'
 const BENCH_STORAGE_KEY = 'sd-prompt-builder:bench'
+const DRAFT_KEY = 'sd-prompt-builder:draft'
+
+// --- Draft (auto-save) ---
+export function saveDraft(data) {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(data))
+  } catch { /* ignore */ }
+}
+
+export function loadDraft() {
+  try {
+    const data = localStorage.getItem(DRAFT_KEY)
+    return data ? JSON.parse(data) : null
+  } catch {
+    return null
+  }
+}
+
+export function clearDraft() {
+  localStorage.removeItem(DRAFT_KEY)
+}
 
 function readFromStorage() {
   try {
