@@ -87,6 +87,7 @@ export default function Sidebar({
   onResetBench, onClearAll,
   translationProvider, onSetTranslationProvider, translatorActiveProvider, PROVIDERS,
   onToggleSidebar,
+  onImportAnalysis,
 }) {
   const fileInputRef = useRef(null)
   const [contextMenu, setContextMenu] = useState(null)
@@ -214,7 +215,7 @@ export default function Sidebar({
         <PromptContextMenu prompt={contextMenu.prompt} position={contextMenu.position}
           onClose={() => setContextMenu(null)} onExportMarkdown={onExportMarkdown} onDelete={onDelete} />
       )}
-      {analysisModalOpen && <PromptAnalysisModal onClose={() => setAnalysisModalOpen(false)} />}
+      {analysisModalOpen && <PromptAnalysisModal onClose={() => setAnalysisModalOpen(false)} onImport={onImportAnalysis} />}
       {settingsModalOpen && (
         <SettingsModal
           translationProvider={translationProvider}

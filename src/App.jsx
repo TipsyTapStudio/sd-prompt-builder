@@ -279,6 +279,26 @@ export default function App() {
     })
   }
 
+  const handleImportAnalysis = ({ sections: newSections, negativeSections: newNeg }) => {
+    // Merge parsed sections into current state (only non-empty values)
+    setSections(prev => {
+      const updated = { ...prev }
+      for (const key of Object.keys(newSections)) {
+        if (newSections[key]) updated[key] = newSections[key]
+      }
+      return updated
+    })
+    setNegativeSections(prev => {
+      const updated = { ...prev }
+      for (const key of Object.keys(newNeg)) {
+        if (newNeg[key]) updated[key] = newNeg[key]
+      }
+      return updated
+    })
+    setCurrentId(null) // treat as new prompt
+    setLastSavedSnapshot(null)
+  }
+
   const handleResetBench = () => {
     if (!window.confirm('ベンチデータをプリセットの初期状態にリセットしますか？')) return
     localStorage.removeItem('sd-prompt-builder:bench')
@@ -320,6 +340,7 @@ export default function App() {
             translatorActiveProvider={translator.activeProvider}
             PROVIDERS={PROVIDERS}
             onToggleSidebar={() => setSidebarOpen(false)}
+            onImportAnalysis={handleImportAnalysis}
           />
         </div>
       </div>
