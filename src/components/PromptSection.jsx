@@ -348,7 +348,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
   const [isTranslating, setIsTranslating] = useState(false)
 
   const handleTranslate = useCallback(async () => {
-    if (!translator?.isAvailable || !value?.trim() || type !== 'positive') return
+    if (!translator?.isAvailable || !value?.trim()) return
     setIsTranslating(true)
     const cleaned = stripComments(value).trim()
     // Translate line by line to preserve structure
@@ -430,7 +430,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   rows={2}
                 />
                 <div className="absolute right-2 bottom-1.5 flex items-center gap-2 pointer-events-none">
-                  {type === 'positive' && translator?.isAvailable && (
+                  {translator?.isAvailable && (
                     <button onClick={handleTranslate}
                       disabled={isTranslating || !value?.trim()}
                       className={`pointer-events-auto px-1.5 py-0 text-[10px] rounded border leading-tight transition-colors ${
@@ -447,7 +447,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                 </div>
               </div>
               {/* Translation error */}
-              {translator?.error && type === 'positive' && (
+              {translator?.error && (
                 <div className="text-[10px] text-gray-500 font-mono mt-0.5 px-3">
                   {translator.error}
                 </div>
