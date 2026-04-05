@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import sectionsData from './data/sections.json'
 import PromptSection from './components/PromptSection'
 import BreakDivider from './components/BreakDivider'
@@ -27,9 +27,15 @@ export default function App() {
   const [includeHeaders, setIncludeHeaders] = useState(false)
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [currentId, setCurrentId] = useState(null)
+  const [titleError, setTitleError] = useState(false)
+  const titleRef = useRef(null)
 
   const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
-  const { prompts, savePrompt, loadPrompt, deletePrompt } = useStorage()
+  const {
+    prompts, savePrompt, loadPrompt, deletePrompt,
+    exportToJson, exportToMarkdown, importFromJson,
+    bench, updateBench, loadBench,
+  } = useStorage()
 
   const updateSection = useCallback((key, value) => {
     setSections(prev => ({ ...prev, [key]: value }))
@@ -40,16 +46,16 @@ export default function App() {
   }, [])
 
   const handleSave = () => {
-    let saveTitle = title
-    if (!saveTitle.trim()) {
-      const input = window.prompt('タイトルを入力してください')
-      if (!input) return
-      saveTitle = input
-      setTitle(saveTitle)
+    if (!title.trim()) {
+      setTitleError(true)
+      titleRef.current?.focus()
+      titleRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      return
     }
+    setTitleError(false)
     const id = savePrompt({
       id: currentId,
-      title: saveTitle,
+      title,
       description,
       sections,
       negative_sections: negativeSections,
@@ -68,6 +74,11 @@ export default function App() {
     setNegativeSections({ ...createEmptyNegativeSections(), ...prompt.negative_sections })
     setCurrentId(prompt.id)
     setShowSaveModal(false)
+    setTitleError(false)
+
+    if (prompt.bench) {
+      loadBench(prompt.bench)
+    }
   }
 
   const handleNew = () => {
@@ -80,44 +91,60 @@ export default function App() {
     setSections(createEmptySections())
     setNegativeSections(createEmptyNegativeSections())
     setCurrentId(null)
+    setTitleError(false)
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-200">
-      <div className="max-w-3xl mx-auto px-4 py-6">
+    <div className="min-h-screen bg-gray-950 text-gray-200 pb-16">
+      <div className="max-w-4xl mx-auto px-4 py-4">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold text-gray-100">SD Prompt Builder</h1>
-          <button
-            onClick={() => setShowSaveModal(true)}
-            className="px-4 py-2 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
-          >
-            保存一覧
-          </button>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-lg font-bold text-gray-100">SD Prompt Builder</h1>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSave}
+              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors cursor-pointer"
+            >
+              保存
+            </button>
+            <button
+              onClick={handleNew}
+              className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
+            >
+              新規
+            </button>
+            <button
+              onClick={() => setShowSaveModal(true)}
+              className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
+            >
+              ファイル
+            </button>
+          </div>
         </div>
 
         {/* Title & Description */}
-        <div className="space-y-3 mb-6">
+        <div className="flex gap-3 mb-4">
           <input
+            ref={titleRef}
             type="text"
             placeholder="タイトル"
             value={title}
-            onChange={e => setTitle(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+            onChange={e => { setTitle(e.target.value); setTitleError(false) }}
+            className={`flex-1 bg-gray-900 border rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none transition-colors ${
+              titleError ? 'border-red-500 focus:border-red-400' : 'border-gray-700 focus:border-blue-500'
+            }`}
           />
           <input
             type="text"
             placeholder="説明（メモ）"
             value={description}
             onChange={e => setDescription(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
           />
         </div>
 
         {/* Positive Sections */}
-        <div className="mb-2">
-          <h2 className="text-sm font-semibold text-blue-400 uppercase tracking-wider mb-3">── Positive ──</h2>
-        </div>
+        <h2 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Positive</h2>
 
         {sectionsData.positive.map((section) => (
           <div key={section.key}>
@@ -126,49 +153,42 @@ export default function App() {
               value={sections[section.key] || ''}
               onChange={(val) => updateSection(section.key, val)}
               type="positive"
+              benchValue={bench[section.key]}
+              onBenchChange={updateBench}
             />
             {section.key === sectionsData.breakAfter && <BreakDivider />}
           </div>
         ))}
 
         {/* Negative Sections */}
-        <div className="mt-6 mb-2">
-          <h2 className="text-sm font-semibold text-red-400 uppercase tracking-wider mb-3">── Negative ──</h2>
-        </div>
+        <h2 className="text-xs font-semibold text-red-400 uppercase tracking-wider mt-4 mb-2">Negative</h2>
 
-        {sectionsData.negative.map((section) => (
-          <PromptSection
-            key={section.key}
-            section={section}
-            value={negativeSections[section.key] || ''}
-            onChange={(val) => updateNegativeSection(section.key, val)}
-            type="negative"
-          />
-        ))}
+        {sectionsData.negative.map((section) => {
+          const benchKey = section.key === 'composition' ? 'neg_composition' : section.key
+          return (
+            <PromptSection
+              key={section.key}
+              section={section}
+              value={negativeSections[section.key] || ''}
+              onChange={(val) => updateNegativeSection(section.key, val)}
+              type="negative"
+              benchValue={bench[benchKey]}
+              onBenchChange={(_sectionKey, val) => {
+                updateBench(benchKey, val)
+              }}
+            />
+          )
+        })}
+      </div>
 
-        {/* Output */}
+      {/* Sticky Output Panel */}
+      <div className="max-w-4xl mx-auto px-4">
         <OutputPanel
           positivePrompt={positivePrompt}
           negativePrompt={negativePrompt}
           includeHeaders={includeHeaders}
           onToggleHeaders={() => setIncludeHeaders(prev => !prev)}
         />
-
-        {/* Action Buttons */}
-        <div className="flex gap-3 mt-6 mb-10">
-          <button
-            onClick={handleSave}
-            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors cursor-pointer"
-          >
-            保存
-          </button>
-          <button
-            onClick={handleNew}
-            className="px-6 py-2.5 bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 font-medium transition-colors cursor-pointer"
-          >
-            新規作成
-          </button>
-        </div>
       </div>
 
       {/* Save Modal */}
@@ -178,6 +198,9 @@ export default function App() {
           onLoad={handleLoad}
           onDelete={deletePrompt}
           onClose={() => setShowSaveModal(false)}
+          onExportJson={exportToJson}
+          onExportMarkdown={exportToMarkdown}
+          onImportJson={importFromJson}
         />
       )}
     </div>

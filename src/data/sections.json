@@ -11,11 +11,11 @@
     { "key": "lora", "name": "Lora", "required": false, "defaultOpen": false }
   ],
   "negative": [
-    { "key": "general_quality", "name": "General Quality", "required": true, "defaultOpen": true },
-    { "key": "body_anatomy", "name": "Body & Anatomy", "required": true, "defaultOpen": true },
-    { "key": "skin_realism", "name": "Skin & Realism", "required": true, "defaultOpen": true },
-    { "key": "lighting", "name": "Lighting", "required": true, "defaultOpen": true },
-    { "key": "composition", "name": "Composition (situational)", "required": false, "defaultOpen": true }
+    { "key": "general_quality", "name": "General Quality", "required": true, "defaultOpen": false },
+    { "key": "body_anatomy", "name": "Body & Anatomy", "required": true, "defaultOpen": false },
+    { "key": "skin_realism", "name": "Skin & Realism", "required": true, "defaultOpen": false },
+    { "key": "lighting", "name": "Lighting", "required": true, "defaultOpen": false },
+    { "key": "composition", "name": "Composition (situational)", "required": false, "defaultOpen": false }
   ],
   "breakAfter": "effects"
 }

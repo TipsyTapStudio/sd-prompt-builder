@@ -1,4 +1,21 @@
-export default function SaveModal({ prompts, onLoad, onDelete, onClose }) {
+import { useRef } from 'react'
+
+export default function SaveModal({ prompts, onLoad, onDelete, onClose, onExportJson, onExportMarkdown, onImportJson }) {
+  const fileInputRef = useRef(null)
+
+  const handleImport = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    try {
+      const result = await onImportJson(file)
+      alert(`インポート完了: ${result.imported}件追加, ${result.skipped}件スキップ`)
+    } catch (err) {
+      alert(`インポートエラー: ${err.message}`)
+    }
+    // Reset file input so the same file can be selected again
+    e.target.value = ''
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div
@@ -6,13 +23,36 @@ export default function SaveModal({ prompts, onLoad, onDelete, onClose }) {
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-          <h3 className="text-base font-semibold text-gray-100">保存一覧</h3>
+          <h3 className="text-base font-semibold text-gray-100">ファイル</h3>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-200 text-lg cursor-pointer"
           >
             ✕
           </button>
+        </div>
+
+        {/* Export / Import buttons */}
+        <div className="flex gap-2 px-4 py-3 border-b border-gray-700">
+          <button
+            onClick={onExportJson}
+            className="px-3 py-1.5 text-xs bg-emerald-700 hover:bg-emerald-600 rounded border border-emerald-600 text-white transition-colors cursor-pointer"
+          >
+            エクスポート(JSON)
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="px-3 py-1.5 text-xs bg-amber-700 hover:bg-amber-600 rounded border border-amber-600 text-white transition-colors cursor-pointer"
+          >
+            インポート
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            onChange={handleImport}
+            className="hidden"
+          />
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
@@ -41,6 +81,12 @@ export default function SaveModal({ prompts, onLoad, onDelete, onClose }) {
                         className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 rounded text-white transition-colors cursor-pointer"
                       >
                         読み込み
+                      </button>
+                      <button
+                        onClick={() => onExportMarkdown(prompt)}
+                        className="px-3 py-1 text-xs bg-gray-600 hover:bg-gray-500 rounded text-gray-200 transition-colors cursor-pointer"
+                      >
+                        MD保存
                       </button>
                       <button
                         onClick={() => {
