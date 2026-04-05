@@ -192,6 +192,17 @@ export default function PromptSection({ section, value, onChange, type, benchVal
     }
   }, [value, onChange])
 
+  // Remove tag from textarea value
+  const removeTagFromValue = useCallback((tag) => {
+    const normalized = normalizeTag(tag)
+    const parts = value.split(',')
+    const filtered = parts.filter(p => normalizeTag(p) !== normalized)
+    let result = filtered.join(',').trim()
+    // Clean up leading/trailing commas and double commas
+    result = result.replace(/^,\s*/, '').replace(/,\s*$/, '').replace(/,\s*,/g, ',')
+    onChange(result)
+  }, [value, onChange])
+
   // Handle bench tag click with Shift support
   const handleBenchTagClick = useCallback((tag, index, e) => {
     if (e.shiftKey) {
@@ -406,23 +417,23 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                           onDragOver={handleDragOver}
                           onDrop={(e) => handleDrop(e, i)}
                           onDragEnd={handleDragEnd}
-                          onClick={(e) => !isUsed && handleBenchTagClick(item.text, i, e)}
-                          className={`text-xs px-1.5 py-0.5 rounded transition-colors whitespace-nowrap leading-tight select-none ${
+                          onClick={(e) => isUsed ? removeTagFromValue(item.text) : handleBenchTagClick(item.text, i, e)}
+                          className={`text-xs px-1.5 py-0.5 rounded transition-colors whitespace-nowrap leading-tight select-none cursor-pointer ${
                             isDragging
                               ? 'opacity-40 bg-blue-600/30 text-blue-300'
                               : isSelected
                                 ? 'bg-blue-600/40 text-blue-200 ring-1 ring-blue-400'
                                 : isUsed
-                                  ? 'opacity-30 line-through bg-gray-700/60 text-gray-400 cursor-default'
-                                  : 'bg-gray-700/60 hover:bg-blue-600/40 hover:text-blue-200 text-gray-400 cursor-pointer'
+                                  ? 'ring-1 ring-green-400/60 bg-green-900/20 text-green-300 hover:ring-red-400/60 hover:bg-red-900/20 hover:text-red-300'
+                                  : 'bg-gray-700/60 hover:bg-blue-600/40 hover:text-blue-200 text-gray-400'
                           }`}
                           title={
-                            isUsed ? `Already used: ${item.text}` :
+                            isUsed ? `Click to remove: ${item.text}` :
                             isSelected ? 'Click to insert selected, Shift+Click to deselect' :
                             'Click to add, Shift+Click to multi-select, Drag to reorder'
                           }
                         >
-                          {item.text}
+                          {isUsed ? `✓ ${item.text}` : item.text}
                         </button>
                       )
                     })}
