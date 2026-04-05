@@ -373,7 +373,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
             {benchOpen && hasBench && (
               <div className="flex-1 flex flex-col min-w-0">
                 {/* Chip area */}
-                <div className="bg-gray-800/70 border border-gray-700 rounded-lg p-1.5 flex-1 min-h-[60px] overflow-y-auto">
+                <div className="bg-gray-800/70 border border-gray-700 rounded-lg p-1.5 min-h-[60px] max-h-[180px] overflow-y-auto">
                   <div className="flex flex-wrap gap-0.5">
                     {benchItems.map((item, i) => {
                       if (item.type === 'comment') {
