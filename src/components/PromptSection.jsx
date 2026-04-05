@@ -417,24 +417,8 @@ export default function PromptSection({ section, value, onChange, type, benchVal
               </div>
               {/* Translation (Positive only) */}
               {translatedText && (
-                <div className="mt-0.5 px-3 text-[10px] font-mono leading-relaxed whitespace-pre-wrap">
-                  {(() => {
-                    // Split original and translated by commas to color-match
-                    const origTags = stripComments(value).split(',').map(t => t.trim()).filter(Boolean)
-                    const transParts = translatedText.split(/,|、/).map(t => t.trim()).filter(Boolean)
-                    return transParts.map((part, idx) => {
-                      const origTag = origTags[idx] || ''
-                      const isInBench = origTag && benchTagsNormalized.has(normalizeTag(origTag))
-                      return (
-                        <span key={idx}>
-                          {idx > 0 && ', '}
-                          <span className={isInBench || !origTag ? 'text-gray-400' : 'text-orange-300/70'}>
-                            {part}
-                          </span>
-                        </span>
-                      )
-                    })
-                  })()}
+                <div className="mt-0.5 px-3 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
+                  {translatedText}
                 </div>
               )}
             </div>
