@@ -153,11 +153,20 @@ export default function PromptSection({ section, value, onChange, type, benchVal
     return () => ta.removeEventListener('mouseup', handleMouseUp)
   }, [isOpen])
 
-  // Active tags for bench filtering
-  const activeTagsSet = useMemo(() => {
-    if (!value || !value.trim()) return new Set()
-    const tags = value.split(',').map(t => normalizeTag(t)).filter(Boolean)
-    return new Set(tags)
+  // Active tags for bench filtering (supports Dynamic Prompts {a | b | c} syntax)
+  // Returns { fixed: Set, dp: Set } to distinguish confirmed vs candidate tags
+  const activeTags = useMemo(() => {
+    if (!value || !value.trim()) return { fixed: new Set(), dp: new Set() }
+    const dpTags = []
+    // Extract tags from Dynamic Prompts {a | b | c} blocks
+    const withoutDP = value.replace(/\{([^}]*)\}/g, (_, inner) => {
+      const cleaned = inner.replace(/^[\d\-]+\$\$(?:[^$]+\$\$)?/, '')
+      dpTags.push(...cleaned.split('|').map(t => normalizeTag(t)).filter(Boolean))
+      return ''
+    })
+    // Remaining comma-separated tags are "fixed"
+    const fixedTags = withoutDP.split(',').map(t => normalizeTag(t)).filter(Boolean)
+    return { fixed: new Set(fixedTags), dp: new Set(dpTags) }
   }, [value])
 
   // Insert tag at cursor position (or end)
@@ -192,13 +201,29 @@ export default function PromptSection({ section, value, onChange, type, benchVal
     }
   }, [value, onChange])
 
-  // Remove tag from textarea value
+  // Remove tag from textarea value (supports Dynamic Prompts {a | b | c})
   const removeTagFromValue = useCallback((tag) => {
     const normalized = normalizeTag(tag)
-    const parts = value.split(',')
-    const filtered = parts.filter(p => normalizeTag(p) !== normalized)
-    let result = filtered.join(',').trim()
-    // Clean up leading/trailing commas and double commas
+
+    // First try to remove from Dynamic Prompts blocks
+    let result = value.replace(/\{([^}]*)\}/g, (match, inner) => {
+      const parts = inner.split('|').map(p => p.trim())
+      const filtered = parts.filter(p => normalizeTag(p) !== normalized)
+      if (filtered.length === parts.length) return match // tag not in this block
+      if (filtered.length === 0) return '' // all removed
+      if (filtered.length === 1) return filtered[0] // unwrap single remaining
+      return `{${filtered.join(' | ')}}` // rebuild block
+    })
+
+    // Then try to remove from comma-separated tags
+    if (result === value) {
+      // Tag wasn't in a DP block, remove from comma-separated
+      const parts = result.split(',')
+      const filtered = parts.filter(p => normalizeTag(p) !== normalized)
+      result = filtered.join(',').trim()
+    }
+
+    // Clean up
     result = result.replace(/^,\s*/, '').replace(/,\s*$/, '').replace(/,\s*,/g, ',')
     onChange(result)
   }, [value, onChange])
@@ -405,7 +430,10 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                         )
                       }
 
-                      const isUsed = activeTagsSet.has(normalizeTag(item.text))
+                      const norm = normalizeTag(item.text)
+                      const isUsedFixed = activeTags.fixed.has(norm)
+                      const isUsedDP = activeTags.dp.has(norm)
+                      const isUsed = isUsedFixed || isUsedDP
                       const isSelected = selectedChips.has(i)
                       const isDragging = dragIndex === i
 
@@ -423,17 +451,20 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                               ? 'opacity-40 bg-blue-600/30 text-blue-300'
                               : isSelected
                                 ? 'bg-blue-600/40 text-blue-200 ring-1 ring-blue-400'
-                                : isUsed
+                                : isUsedDP
+                                  ? 'ring-1 ring-amber-400/60 bg-amber-900/20 text-amber-300 hover:ring-red-400/60 hover:bg-red-900/20 hover:text-red-300'
+                                : isUsedFixed
                                   ? 'ring-1 ring-green-400/60 bg-green-900/20 text-green-300 hover:ring-red-400/60 hover:bg-red-900/20 hover:text-red-300'
                                   : 'bg-gray-700/60 hover:bg-blue-600/40 hover:text-blue-200 text-gray-400'
                           }`}
                           title={
-                            isUsed ? `Click to remove: ${item.text}` :
+                            isUsedDP ? `DP candidate - Click to remove: ${item.text}` :
+                            isUsedFixed ? `Active - Click to remove: ${item.text}` :
                             isSelected ? 'Click to insert selected, Shift+Click to deselect' :
                             'Click to add, Shift+Click to multi-select, Drag to reorder'
                           }
                         >
-                          {isUsed ? `✓ ${item.text}` : item.text}
+                          {isUsedDP ? `◇ ${item.text}` : isUsedFixed ? `✓ ${item.text}` : item.text}
                         </button>
                       )
                     })}
