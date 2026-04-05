@@ -350,16 +350,52 @@ export default function PromptSection({ section, value, onChange, type, benchVal
   const handleTranslate = useCallback(async () => {
     if (!translator?.isAvailable || !value?.trim()) return
     setIsTranslating(true)
-    const cleaned = stripComments(value).trim()
-    // Translate line by line to preserve structure
-    const lines = cleaned.split('\n').map(l => l.trim())
-    const results = []
-    for (const line of lines) {
-      if (!line) { results.push(''); continue }
-      const result = await translator.translate(line)
-      results.push(result)
+    try {
+      const cleaned = stripComments(value).trim()
+      const lines = cleaned.split('\n').map(l => l.trim())
+      const results = []
+      for (const line of lines) {
+        if (!line) { results.push(''); continue }
+        // Handle Dynamic Prompts: {a | b | c} → translate each option
+        const dpPattern = /\{([^}]*)\}/g
+        let processedLine = line
+        const dpMatches = [...line.matchAll(dpPattern)]
+        if (dpMatches.length > 0) {
+          for (const match of dpMatches) {
+            const inner = match[1]
+            // Preserve prefix like "2$$" or "1-3$$"
+            const prefixMatch = inner.match(/^([\d\-]+\$\$(?:[^$|]+\$\$)?)(.*)$/)
+            const prefix = prefixMatch ? prefixMatch[1] : ''
+            const optionsStr = prefixMatch ? prefixMatch[2] : inner
+            const options = optionsStr.split('|').map(o => o.trim())
+            const translated = []
+            for (const opt of options) {
+              if (!opt) { translated.push(''); continue }
+              translated.push(await translator.translate(opt))
+            }
+            processedLine = processedLine.replace(match[0], `{${prefix}${translated.join(' | ')}}`)
+          }
+          // Translate the rest (outside DP blocks)
+          const outside = processedLine.replace(/\{[^}]*\}/g, '___DP___').split('___DP___')
+          const dpBlocks = [...processedLine.matchAll(/\{[^}]*\}/g)].map(m => m[0])
+          const translatedParts = []
+          for (let i = 0; i < outside.length; i++) {
+            if (outside[i].trim()) {
+              translatedParts.push(await translator.translate(outside[i]))
+            } else {
+              translatedParts.push(outside[i])
+            }
+            if (i < dpBlocks.length) translatedParts.push(dpBlocks[i])
+          }
+          results.push(translatedParts.join(''))
+        } else {
+          results.push(await translator.translate(line))
+        }
+      }
+      setTranslatedText(results.join('\n'))
+    } catch (err) {
+      console.warn('Translation error:', err)
     }
-    setTranslatedText(results.join('\n'))
     setIsTranslating(false)
   }, [translator, value, type])
 
