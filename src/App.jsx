@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import sectionsData from './data/sections.json'
 import PromptSection from './components/PromptSection'
 import BreakDivider from './components/BreakDivider'
@@ -29,7 +29,36 @@ export default function App() {
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [currentId, setCurrentId] = useState(null)
   const [titleError, setTitleError] = useState(false)
+  const [showSettings, setShowSettings] = useState(false)
   const titleRef = useRef(null)
+  const settingsRef = useRef(null)
+
+  // Close settings dropdown on outside click
+  useEffect(() => {
+    if (!showSettings) return
+    const handleClick = (e) => {
+      if (settingsRef.current && !settingsRef.current.contains(e.target)) {
+        setShowSettings(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showSettings])
+
+  const handleResetBench = () => {
+    if (!window.confirm('ベンチデータをプリセットの初期状態にリセットしますか？')) return
+    localStorage.removeItem('sd-prompt-builder:bench')
+    loadBench({})
+    setShowSettings(false)
+  }
+
+  const handleClearAll = () => {
+    if (!window.confirm('全てのデータ（保存済みプロンプト・ベンチ・設定）をクリアしますか？\nこの操作は取り消せません。')) return
+    localStorage.removeItem('sd-prompt-builder:prompts')
+    localStorage.removeItem('sd-prompt-builder:bench')
+    localStorage.removeItem('sd-prompt-builder:settings')
+    window.location.reload()
+  }
 
   const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
   const {
@@ -121,6 +150,32 @@ export default function App() {
               >
                 ファイル
               </button>
+              {/* Settings */}
+              <div className="relative ml-2" ref={settingsRef}>
+                <button
+                  onClick={() => setShowSettings(!showSettings)}
+                  className="px-2 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
+                  title="設定"
+                >
+                  ⚙
+                </button>
+                {showSettings && (
+                  <div className="absolute right-0 top-full mt-1 w-52 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
+                    <button
+                      onClick={handleResetBench}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer"
+                    >
+                      ベンチを初期化
+                    </button>
+                    <button
+                      onClick={handleClearAll}
+                      className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-950 hover:text-red-300 transition-colors cursor-pointer border-t border-gray-700"
+                    >
+                      全データをクリア
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
           {/* Toolbar placeholder for future text decoration tools */}
