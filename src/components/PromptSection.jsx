@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import presetsData from '../data/presets.json'
 import HighlightOverlay from './HighlightOverlay'
 import { parseComments, stripComments } from '../utils/commentParser'
-import { useDebouncedTranslation } from '../hooks/useTranslator'
+// Translation is now triggered manually via button
 
 function estimateTokens(text) {
   if (!text || !text.trim()) return 0
@@ -343,12 +343,23 @@ export default function PromptSection({ section, value, onChange, type, benchVal
     return tags.some(t => !benchTagsNormalized.has(t))
   }, [value, benchTagsNormalized])
 
-  // Translation (Positive sections only, when translator available)
-  const cleanTextForTranslation = useMemo(() => {
-    if (type !== 'positive' || !translator?.isAvailable) return ''
-    return stripComments(value).trim()
-  }, [value, type, translator?.isAvailable])
-  const translatedText = useDebouncedTranslation(cleanTextForTranslation, translator || { isAvailable: false, translate: async () => '' })
+  // Translation (manual, Positive sections only)
+  const [translatedText, setTranslatedText] = useState('')
+  const [isTranslating, setIsTranslating] = useState(false)
+
+  const handleTranslate = useCallback(async () => {
+    if (!translator?.isAvailable || !value?.trim() || type !== 'positive') return
+    setIsTranslating(true)
+    const cleaned = stripComments(value).trim()
+    const result = await translator.translate(cleaned)
+    setTranslatedText(result)
+    setIsTranslating(false)
+  }, [translator, value, type])
+
+  // Clear translation when value changes
+  useEffect(() => {
+    if (translatedText) setTranslatedText('')
+  }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const tokenCount = useMemo(() => estimateTokens(value), [value])
   const tokenColorClass = tokenCount > 75
@@ -411,24 +422,27 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   placeholder={`${section.name} tags...`}
                   rows={2}
                 />
-                <span className={`absolute right-2 bottom-1.5 text-xs ${tokenColorClass} pointer-events-none`}>
-                  {'\u2248'}{tokenCount}/75
-                </span>
+                <div className="absolute right-2 bottom-1.5 flex items-center gap-1.5">
+                  {type === 'positive' && translator?.isAvailable && (
+                    <button onClick={handleTranslate} disabled={isTranslating}
+                      className="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors"
+                      title="翻訳">
+                      {isTranslating ? '...' : '訳'}
+                    </button>
+                  )}
+                  <span className={`text-xs ${tokenColorClass} pointer-events-none`}>
+                    {'\u2248'}{tokenCount}/75
+                  </span>
+                </div>
               </div>
               {/* Translation (Positive only) */}
               {translator?.error && type === 'positive' && (
-                <div className="mt-0.5 px-3 text-[10px] text-gray-500 font-mono leading-relaxed">
-                  <span className="text-amber-400/70">{translator.error}</span>
-                  <span className="text-gray-600 ml-1">
-                    — サイドバー下部で翻訳エンジンを切り替えるか、OFFにしてください
-                  </span>
+                <div className="mt-0.5 px-3 text-[10px] text-gray-500 font-mono">
+                  {translator.error} — ヘッダーの翻訳ボタンから設定を変更できます
                 </div>
               )}
               {translatedText && (
                 <div className="mt-0.5 px-3 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
-                  {translator?.activeProvider && (
-                    <span className="text-gray-600 mr-1">[{translator.activeProvider}]</span>
-                  )}
                   {translatedText}
                 </div>
               )}

@@ -352,18 +352,21 @@ export default function App() {
                 )}
               </div>
             </div>
-            {/* Right: translation + save */}
+            {/* Right: translation status + save */}
             <div className="flex items-center gap-2 flex-shrink-0">
               <button onClick={() => setTranslationProvider(prev =>
                 prev === PROVIDERS.OFF ? PROVIDERS.MYMEMORY : PROVIDERS.OFF
               )}
-                className={`p-1 rounded text-xs transition-colors cursor-pointer ${
+                className={`px-1.5 py-0.5 rounded text-[11px] transition-colors cursor-pointer flex items-center gap-1 ${
                   translationProvider !== PROVIDERS.OFF
                     ? 'text-blue-400 hover:text-blue-300 bg-blue-600/10'
                     : 'text-gray-500 hover:text-gray-400'
                 }`}
-                title={translationProvider !== PROVIDERS.OFF ? '翻訳ON' : '翻訳OFF'}>
-                訳
+                title="クリックで翻訳ON/OFF切替。エンジン変更は設定から">
+                {translationProvider === PROVIDERS.OFF
+                  ? '翻訳OFF'
+                  : `翻訳 ${translator.activeProvider || translationProvider}`
+                }
               </button>
               <button onClick={saveButtonActive ? handleSave : undefined}
                 className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${saveButtonClass} ${
