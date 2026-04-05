@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import sectionsData from '../data/sections.json'
 
-const ANALYSIS_TEMPLATE = `# SD プロンプト構造化分析
+const ANALYSIS_TEMPLATE = `# Portrait Prompt 構造化分析
 
 以下のプロンプトを指定セクションに分解してください。
 

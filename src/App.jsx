@@ -359,7 +359,7 @@ export default function App() {
                 </button>
               )}
               {!sidebarOpen && (
-                <span className="text-[11px] text-gray-500 flex-shrink-0 mr-1">SD Prompt Builder</span>
+                <span className="text-[11px] text-gray-500 flex-shrink-0 mr-1">PPB for SDXL</span>
               )}
               {/* Title dropdown */}
               <div className="relative min-w-0">

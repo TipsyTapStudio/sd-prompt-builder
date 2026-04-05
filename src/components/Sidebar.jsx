@@ -123,7 +123,7 @@ export default function Sidebar({
     <div className="h-full flex flex-col bg-[#0d1117] border-r border-gray-800/60">
       {/* Header with close button */}
       <div className="px-3 py-2.5 flex items-center justify-between">
-        <span className="text-[13px] font-semibold text-gray-400 tracking-tight">SD Prompt Builder</span>
+        <span className="text-[13px] font-semibold text-gray-400 tracking-tight">PPB <span className="text-gray-600 font-normal">for SDXL</span></span>
         <button onClick={onToggleSidebar}
           className="p-1 text-gray-500 hover:text-gray-300 rounded hover:bg-white/[0.05] cursor-pointer transition-colors"
           title="サイドバーを閉じる">
