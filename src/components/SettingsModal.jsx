@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 
 function CloseIcon({ size = 16 }) {
   return (
@@ -15,7 +16,7 @@ export default function SettingsModal({
 }) {
   const [confirmClear, setConfirmClear] = useState(false)
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
@@ -111,6 +112,7 @@ export default function SettingsModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
