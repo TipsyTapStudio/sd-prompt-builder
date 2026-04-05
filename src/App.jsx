@@ -67,7 +67,24 @@ export default function App() {
     prompts, savePrompt, loadPrompt, deletePrompt,
     exportToJson, exportToMarkdown, importFromJson,
     bench, updateBench, loadBench,
+    getFirstSamplePrompt,
   } = useStorage()
+
+  // Auto-load first sample prompt on initial launch
+  useEffect(() => {
+    const hasAnyContent = Object.values(sections).some(v => v.trim()) ||
+      Object.values(negativeSections).some(v => v.trim())
+    if (!hasAnyContent && !currentId) {
+      const sample = getFirstSamplePrompt()
+      if (sample) {
+        setTitle(sample.title || '')
+        setDescription(sample.description || '')
+        setSections(prev => ({ ...prev, ...sample.sections }))
+        setNegativeSections(prev => ({ ...prev, ...sample.negative_sections }))
+        setCurrentId(sample.id)
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateSection = useCallback((key, value) => {
     setSections(prev => ({ ...prev, [key]: value }))

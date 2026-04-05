@@ -188,6 +188,49 @@ export function useStorage() {
       }
     }
 
+    // Bench data (at the bottom, after separator)
+    const benchData = prompt.bench || {}
+    const allSections = [...sectionsData.positive, ...sectionsData.negative]
+    const hasBenchContent = allSections.some(s => {
+      const key = s.key === 'composition' && sectionsData.negative.includes(s) ? 'neg_composition' : s.key
+      return (benchData[key] || '').trim()
+    })
+
+    if (hasBenchContent) {
+      lines.push('---')
+      lines.push('')
+      lines.push('## Bench')
+      lines.push('')
+
+      for (const section of allSections) {
+        const key = sectionsData.negative.some(n => n.key === section.key && section === sectionsData.negative.find(n2 => n2.key === section.key))
+          ? (section.key === 'composition' ? 'neg_composition' : section.key)
+          : section.key
+        const benchText = (benchData[key] || '').trim()
+        if (!benchText) continue
+
+        lines.push(`### ${section.name}`)
+        // Format bench text with labels on separate lines
+        const parts = benchText.split(',').map(p => p.trim()).filter(Boolean)
+        let currentTags = []
+        for (const part of parts) {
+          if (part.startsWith('#') || part.startsWith('//')) {
+            if (currentTags.length > 0) {
+              lines.push(currentTags.join(', '))
+              currentTags = []
+            }
+            lines.push(part)
+          } else {
+            currentTags.push(part)
+          }
+        }
+        if (currentTags.length > 0) {
+          lines.push(currentTags.join(', '))
+        }
+        lines.push('')
+      }
+    }
+
     const md = lines.join('\n').trimEnd() + '\n'
     const filename = `${prompt.title || 'untitled'}.md`
     downloadFile(md, filename, 'text/markdown')
@@ -263,5 +306,6 @@ export function useStorage() {
     bench,
     updateBench,
     loadBench,
+    getFirstSamplePrompt: () => samplePrompts[0] || null,
   }
 }
