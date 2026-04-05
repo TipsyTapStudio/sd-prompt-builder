@@ -85,7 +85,7 @@ export default function Sidebar({
   prompts, currentId, onLoad, onDuplicate, onNew, onDelete,
   onExportJson, onExportMarkdown, onImportJson,
   onResetBench, onClearAll,
-  translationProvider, onSetTranslationProvider, PROVIDERS,
+  translationProvider, onSetTranslationProvider, translatorActiveProvider, PROVIDERS,
   onToggleSidebar,
 }) {
   const fileInputRef = useRef(null)

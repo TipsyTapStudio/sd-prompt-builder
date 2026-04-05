@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import presetsData from '../data/presets.json'
 import HighlightOverlay from './HighlightOverlay'
 import { parseComments, stripComments } from '../utils/commentParser'
-// Translation is now triggered manually via button
+// Translation: manual per-section button
 
 function estimateTokens(text) {
   if (!text || !text.trim()) return 0
@@ -343,7 +343,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
     return tags.some(t => !benchTagsNormalized.has(t))
   }, [value, benchTagsNormalized])
 
-  // Translation (manual, Positive sections only)
+  // Translation (manual, per-section, Positive only)
   const [translatedText, setTranslatedText] = useState('')
   const [isTranslating, setIsTranslating] = useState(false)
 
@@ -380,6 +380,21 @@ export default function PromptSection({ section, value, onChange, type, benchVal
           <span className="text-sm font-medium text-gray-200">{label}</span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Translate button (Positive, open, translator available) */}
+          {type === 'positive' && translator?.isAvailable && isOpen && (
+            <button onClick={(e) => { e.stopPropagation(); handleTranslate() }}
+              disabled={isTranslating || !value?.trim()}
+              className={`px-1.5 py-0.5 text-[11px] rounded border transition-colors cursor-pointer ${
+                isTranslating
+                  ? 'border-gray-600 text-gray-500 cursor-default'
+                  : translatedText
+                    ? 'border-green-700 text-green-500 hover:border-green-600 hover:text-green-400'
+                    : 'border-gray-600 text-gray-400 hover:border-blue-500 hover:text-blue-400'
+              }`}
+              title="このセクションを翻訳">
+              {isTranslating ? '...' : '翻訳'}
+            </button>
+          )}
           {!isOpen && tokenCount > 0 && (
             <span className={`text-xs ${tokenColorClass}`}>
               {'\u2248'} {tokenCount} tokens
@@ -422,25 +437,11 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   placeholder={`${section.name} tags...`}
                   rows={2}
                 />
-                <div className="absolute right-2 bottom-1.5 flex items-center gap-1.5">
-                  {type === 'positive' && translator?.isAvailable && (
-                    <button onClick={handleTranslate} disabled={isTranslating}
-                      className="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer transition-colors"
-                      title="翻訳">
-                      {isTranslating ? '...' : '訳'}
-                    </button>
-                  )}
-                  <span className={`text-xs ${tokenColorClass} pointer-events-none`}>
-                    {'\u2248'}{tokenCount}/75
-                  </span>
-                </div>
+                <span className={`absolute right-2 bottom-1.5 text-xs ${tokenColorClass} pointer-events-none`}>
+                  {'\u2248'}{tokenCount}/75
+                </span>
               </div>
-              {/* Translation (Positive only) */}
-              {translator?.error && type === 'positive' && (
-                <div className="mt-0.5 px-3 text-[10px] text-gray-500 font-mono">
-                  {translator.error} — ヘッダーの翻訳ボタンから設定を変更できます
-                </div>
-              )}
+              {/* Translation result (per-section) */}
               {translatedText && (
                 <div className="mt-0.5 px-3 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
                   {translatedText}
