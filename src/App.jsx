@@ -3,10 +3,12 @@ import sectionsData from './data/sections.json'
 import PromptSection from './components/PromptSection'
 import BreakDivider from './components/BreakDivider'
 import OutputPanel from './components/OutputPanel'
-import SaveModal from './components/SaveModal'
+import Sidebar, { SidebarIcon } from './components/Sidebar'
 import { usePromptBuilder } from './hooks/usePromptBuilder'
 import { useStorage } from './hooks/useStorage'
 import { useTranslator, PROVIDERS } from './hooks/useTranslator'
+
+const SIDEBAR_WIDTH = 260
 
 const createEmptySections = () => {
   const sections = {}
@@ -27,31 +29,16 @@ export default function App() {
   const [negativeSections, setNegativeSections] = useState(createEmptyNegativeSections)
   const [includeHeaders, setIncludeHeaders] = useState(false)
   const [includeComments, setIncludeComments] = useState(true)
-  const [showSaveModal, setShowSaveModal] = useState(false)
   const [currentId, setCurrentId] = useState(null)
   const [titleError, setTitleError] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [translationProvider, setTranslationProvider] = useState(PROVIDERS.MYMEMORY)
   const titleRef = useRef(null)
-  const settingsRef = useRef(null)
-
-  // Close settings dropdown on outside click
-  useEffect(() => {
-    if (!showSettings) return
-    const handleClick = (e) => {
-      if (settingsRef.current && !settingsRef.current.contains(e.target)) {
-        setShowSettings(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [showSettings])
 
   const handleResetBench = () => {
     if (!window.confirm('ベンチデータをプリセットの初期状態にリセットしますか？')) return
     localStorage.removeItem('sd-prompt-builder:bench')
     loadBench({})
-    setShowSettings(false)
   }
 
   const handleClearAll = () => {
@@ -123,7 +110,6 @@ export default function App() {
     setSections({ ...createEmptySections(), ...prompt.sections })
     setNegativeSections({ ...createEmptyNegativeSections(), ...prompt.negative_sections })
     setCurrentId(prompt.id)
-    setShowSaveModal(false)
     setTitleError(false)
 
     if (prompt.bench) {
@@ -145,182 +131,135 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-200 pb-16">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
-        <div className="max-w-5xl mx-auto px-4 py-2">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-bold text-gray-100">SD Prompt Builder</h1>
+    <div className="min-h-screen bg-gray-950 text-gray-200 flex">
+      {/* Sidebar */}
+      <div
+        className="flex-shrink-0 h-screen sticky top-0 transition-all duration-200 overflow-hidden"
+        style={{ width: sidebarOpen ? SIDEBAR_WIDTH : 0 }}
+      >
+        <div style={{ width: SIDEBAR_WIDTH }} className="h-full">
+          <Sidebar
+            prompts={prompts}
+            currentId={currentId}
+            onLoad={handleLoad}
+            onNew={handleNew}
+            onDelete={deletePrompt}
+            onExportJson={exportToJson}
+            onExportMarkdown={exportToMarkdown}
+            onImportJson={importFromJson}
+            onResetBench={handleResetBench}
+            onClearAll={handleClearAll}
+            translationProvider={translationProvider}
+            onSetTranslationProvider={setTranslationProvider}
+            translatorActiveProvider={translator.activeProvider}
+            PROVIDERS={PROVIDERS}
+          />
+        </div>
+      </div>
+
+      {/* Main content */}
+      <div className="flex-1 min-w-0 pb-16">
+        {/* Header */}
+        <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
+          <div className="px-4 py-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <button
-                onClick={handleSave}
-                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors cursor-pointer"
+                onClick={() => setSidebarOpen(!sidebarOpen)}
+                className="p-1 text-gray-400 hover:text-gray-200 transition-colors cursor-pointer rounded hover:bg-gray-800"
+                title={sidebarOpen ? 'サイドバーを閉じる' : 'サイドバーを開く'}
               >
-                保存
+                <SidebarIcon size={18} />
               </button>
-              <button
-                onClick={handleNew}
-                className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
-              >
-                新規
-              </button>
-              <button
-                onClick={() => setShowSaveModal(true)}
-                className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
-              >
-                ファイル
-              </button>
-              {/* Settings */}
-              <div className="relative ml-2" ref={settingsRef}>
-                <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="px-2 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
-                  title="設定"
-                >
-                  ⚙
-                </button>
-                {showSettings && (
-                  <div className="absolute right-0 top-full mt-1 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
-                    {/* Translation provider */}
-                    <div className="px-3 py-2 border-b border-gray-700">
-                      <div className="text-[11px] text-gray-500 mb-1">翻訳</div>
-                      <div className="flex gap-1">
-                        {[
-                          { key: PROVIDERS.AUTO, label: 'Auto' },
-                          { key: PROVIDERS.MYMEMORY, label: 'MyMemory' },
-                          { key: PROVIDERS.CHROME, label: 'Chrome' },
-                          { key: PROVIDERS.OFF, label: 'OFF' },
-                        ].map(({ key, label }) => (
-                          <button
-                            key={key}
-                            onClick={() => setTranslationProvider(key)}
-                            className={`px-1.5 py-0.5 text-[11px] rounded transition-colors cursor-pointer ${
-                              translationProvider === key
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-700 text-gray-400 hover:text-gray-200'
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                      {translator.activeProvider && (
-                        <div className="text-[10px] text-gray-600 mt-1">
-                          active: {translator.activeProvider}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={handleResetBench}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer"
-                    >
-                      ベンチを初期化
-                    </button>
-                    <button
-                      onClick={handleClearAll}
-                      className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-950 hover:text-red-300 transition-colors cursor-pointer border-t border-gray-700"
-                    >
-                      全データをクリア
-                    </button>
-                  </div>
-                )}
-              </div>
+              {!sidebarOpen && (
+                <span className="text-sm font-bold text-gray-300">SD Prompt Builder</span>
+              )}
             </div>
+            <button
+              onClick={handleSave}
+              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors cursor-pointer"
+            >
+              保存
+            </button>
           </div>
-          {/* Toolbar placeholder for future text decoration tools */}
-          <div id="toolbar-placeholder" className="hidden"></div>
-        </div>
-      </div>
-
-      <div className="max-w-5xl mx-auto px-4 pt-4">
-        {/* Title & Description */}
-        <div className="flex gap-3 mb-4">
-          <input
-            ref={titleRef}
-            type="text"
-            placeholder="タイトル"
-            value={title}
-            onChange={e => { setTitle(e.target.value); setTitleError(false) }}
-            className={`flex-1 bg-gray-900 border rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none transition-colors ${
-              titleError ? 'border-red-500 focus:border-red-400' : 'border-gray-700 focus:border-blue-500'
-            }`}
-          />
-          <input
-            type="text"
-            placeholder="説明（メモ）"
-            value={description}
-            onChange={e => setDescription(e.target.value)}
-            className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
-          />
         </div>
 
-        {/* Positive Sections */}
-        <h2 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Positive</h2>
-
-        {sectionsData.positive.map((section) => (
-          <div key={section.key}>
-            <PromptSection
-              section={section}
-              value={sections[section.key] || ''}
-              onChange={(val) => updateSection(section.key, val)}
-              type="positive"
-              benchValue={bench[section.key]}
-              onBenchChange={updateBench}
-              translator={translator}
+        <div className="max-w-5xl mx-auto px-4 pt-4">
+          {/* Title & Description */}
+          <div className="flex gap-3 mb-4">
+            <input
+              ref={titleRef}
+              type="text"
+              placeholder="タイトル"
+              value={title}
+              onChange={e => { setTitle(e.target.value); setTitleError(false) }}
+              className={`flex-1 bg-gray-900 border rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none transition-colors ${
+                titleError ? 'border-red-500 focus:border-red-400' : 'border-gray-700 focus:border-blue-500'
+              }`}
             />
-            {section.key === sectionsData.breakAfter && <BreakDivider />}
+            <input
+              type="text"
+              placeholder="説明（メモ）"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-1.5 text-sm text-gray-100 placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
+            />
           </div>
-        ))}
 
-        {/* Negative Sections */}
-        <h2 className="text-xs font-semibold text-red-400 uppercase tracking-wider mt-4 mb-2">Negative</h2>
+          {/* Positive Sections */}
+          <h2 className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-2">Positive</h2>
 
-        {sectionsData.negative.map((section) => {
-          const benchKey = section.key === 'composition' ? 'neg_composition' : section.key
-          return (
-            <PromptSection
-              key={section.key}
-              section={section}
-              value={negativeSections[section.key] || ''}
-              onChange={(val) => updateNegativeSection(section.key, val)}
-              type="negative"
-              benchValue={bench[benchKey]}
-              onBenchChange={(_sectionKey, val) => {
-                updateBench(benchKey, val)
-              }}
-            />
-          )
-        })}
+          {sectionsData.positive.map((section) => (
+            <div key={section.key}>
+              <PromptSection
+                section={section}
+                value={sections[section.key] || ''}
+                onChange={(val) => updateSection(section.key, val)}
+                type="positive"
+                benchValue={bench[section.key]}
+                onBenchChange={updateBench}
+                translator={translator}
+              />
+              {section.key === sectionsData.breakAfter && <BreakDivider />}
+            </div>
+          ))}
+
+          {/* Negative Sections */}
+          <h2 className="text-xs font-semibold text-red-400 uppercase tracking-wider mt-4 mb-2">Negative</h2>
+
+          {sectionsData.negative.map((section) => {
+            const benchKey = section.key === 'composition' ? 'neg_composition' : section.key
+            return (
+              <PromptSection
+                key={section.key}
+                section={section}
+                value={negativeSections[section.key] || ''}
+                onChange={(val) => updateNegativeSection(section.key, val)}
+                type="negative"
+                benchValue={bench[benchKey]}
+                onBenchChange={(_sectionKey, val) => {
+                  updateBench(benchKey, val)
+                }}
+              />
+            )
+          })}
+        </div>
+
+        {/* Output Panel */}
+        <div className="max-w-5xl mx-auto px-4">
+          <OutputPanel
+            positivePrompt={positivePrompt}
+            negativePrompt={negativePrompt}
+            includeHeaders={includeHeaders}
+            onToggleHeaders={() => setIncludeHeaders(prev => !prev)}
+            includeComments={includeComments}
+            onToggleComments={() => setIncludeComments(prev => !prev)}
+            sections={sections}
+            negativeSections={negativeSections}
+            onSectionsUpdate={setSections}
+            onNegativeSectionsUpdate={setNegativeSections}
+          />
+        </div>
       </div>
-
-      {/* Sticky Output Panel */}
-      <div className="max-w-5xl mx-auto px-4">
-        <OutputPanel
-          positivePrompt={positivePrompt}
-          negativePrompt={negativePrompt}
-          includeHeaders={includeHeaders}
-          onToggleHeaders={() => setIncludeHeaders(prev => !prev)}
-          includeComments={includeComments}
-          onToggleComments={() => setIncludeComments(prev => !prev)}
-          sections={sections}
-          negativeSections={negativeSections}
-          onSectionsUpdate={setSections}
-          onNegativeSectionsUpdate={setNegativeSections}
-        />
-      </div>
-
-      {/* Save Modal */}
-      {showSaveModal && (
-        <SaveModal
-          prompts={prompts}
-          onLoad={handleLoad}
-          onDelete={deletePrompt}
-          onClose={() => setShowSaveModal(false)}
-          onExportJson={exportToJson}
-          onExportMarkdown={exportToMarkdown}
-          onImportJson={importFromJson}
-        />
-      )}
     </div>
   )
 }
