@@ -429,31 +429,32 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   placeholder={`${section.name} tags...`}
                   rows={2}
                 />
-                <span className={`absolute right-2 bottom-1.5 text-xs ${tokenColorClass} pointer-events-none`}>
-                  {'\u2248'}{tokenCount}/75
-                </span>
-              </div>
-              {/* Translation (per-section, Positive only) */}
-              {type === 'positive' && translator?.isAvailable && (
-                <div className="mt-1 flex items-start gap-2">
-                  <button onClick={handleTranslate}
-                    disabled={isTranslating || !value?.trim()}
-                    className={`flex-shrink-0 px-2 py-0.5 text-[11px] rounded border transition-colors ${
-                      isTranslating
-                        ? 'border-gray-600 text-gray-500 cursor-default'
-                        : 'border-gray-600 text-gray-400 hover:border-blue-500 hover:text-blue-400 cursor-pointer'
-                    }`}>
-                    {isTranslating ? '翻訳中...' : '翻訳'}
-                  </button>
-                  {translator?.error && (
-                    <span className="text-[10px] text-gray-500">
-                      {translator.error}
-                    </span>
+                <div className="absolute right-2 bottom-1.5 flex items-center gap-2 pointer-events-none">
+                  {type === 'positive' && translator?.isAvailable && (
+                    <button onClick={handleTranslate}
+                      disabled={isTranslating || !value?.trim()}
+                      className={`pointer-events-auto px-1.5 py-0 text-[10px] rounded border leading-tight transition-colors ${
+                        isTranslating
+                          ? 'border-gray-600 text-gray-500 cursor-default'
+                          : 'border-gray-600 text-gray-400 hover:border-blue-500 hover:text-blue-400 cursor-pointer'
+                      }`}>
+                      {isTranslating ? '...' : '翻訳'}
+                    </button>
                   )}
+                  <span className={`text-xs ${tokenColorClass}`}>
+                    {'\u2248'}{tokenCount}/75
+                  </span>
+                </div>
+              </div>
+              {/* Translation error */}
+              {translator?.error && type === 'positive' && (
+                <div className="text-[10px] text-gray-500 font-mono mt-0.5 px-3">
+                  {translator.error}
                 </div>
               )}
+              {/* Translation result */}
               {translatedText && (
-                <div className="mt-0.5 px-1 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
+                <div className="text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap mt-0.5 px-3">
                   {translatedText}
                 </div>
               )}
