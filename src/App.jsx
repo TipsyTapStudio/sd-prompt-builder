@@ -96,32 +96,38 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 pb-16">
-      <div className="max-w-4xl mx-auto px-4 py-4">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-lg font-bold text-gray-100">SD Prompt Builder</h1>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSave}
-              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors cursor-pointer"
-            >
-              保存
-            </button>
-            <button
-              onClick={handleNew}
-              className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
-            >
-              新規
-            </button>
-            <button
-              onClick={() => setShowSaveModal(true)}
-              className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
-            >
-              ファイル
-            </button>
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
+        <div className="max-w-4xl mx-auto px-4 py-2">
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-bold text-gray-100">SD Prompt Builder</h1>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleSave}
+                className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-500 rounded-lg font-medium transition-colors cursor-pointer"
+              >
+                保存
+              </button>
+              <button
+                onClick={handleNew}
+                className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
+              >
+                新規
+              </button>
+              <button
+                onClick={() => setShowSaveModal(true)}
+                className="px-3 py-1.5 text-sm bg-gray-800 hover:bg-gray-700 rounded-lg border border-gray-700 transition-colors cursor-pointer"
+              >
+                ファイル
+              </button>
+            </div>
           </div>
+          {/* Toolbar placeholder for future text decoration tools */}
+          <div id="toolbar-placeholder" className="hidden"></div>
         </div>
+      </div>
 
+      <div className="max-w-4xl mx-auto px-4 pt-4">
         {/* Title & Description */}
         <div className="flex gap-3 mb-4">
           <input
@@ -188,6 +194,10 @@ export default function App() {
           negativePrompt={negativePrompt}
           includeHeaders={includeHeaders}
           onToggleHeaders={() => setIncludeHeaders(prev => !prev)}
+          sections={sections}
+          negativeSections={negativeSections}
+          onSectionsUpdate={setSections}
+          onNegativeSectionsUpdate={setNegativeSections}
         />
       </div>
 

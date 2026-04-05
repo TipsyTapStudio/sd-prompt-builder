@@ -1,9 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import presetsData from '../data/presets.json'
+import HighlightOverlay from './HighlightOverlay'
+import { parseComments, stripComments } from '../utils/commentParser'
 
 function estimateTokens(text) {
   if (!text || !text.trim()) return 0
-  const segments = text.split(',').map(s => s.trim()).filter(Boolean)
+  const cleaned = stripComments(text)
+  const segments = cleaned.split(',').map(s => s.trim()).filter(Boolean)
   let count = 0
   for (const seg of segments) {
     const words = seg.split(/\s+/).filter(Boolean)
@@ -12,11 +15,19 @@ function estimateTokens(text) {
   return count
 }
 
+function normalizeTag(tag) {
+  let t = tag.trim()
+  const match = t.match(/^\((.+?)(?::\d+(?:\.\d+)?)?\)$/)
+  if (match) t = match[1]
+  return t.toLowerCase()
+}
+
 export default function PromptSection({ section, value, onChange, type, benchValue, onBenchChange }) {
   const [isOpen, setIsOpen] = useState(section.defaultOpen)
   const [benchEditMode, setBenchEditMode] = useState(false)
   const textareaRef = useRef(null)
   const benchRef = useRef(null)
+  const userMinHeight = useRef(0)
 
   const borderColor = type === 'positive' ? 'border-blue-500' : 'border-red-500'
   const label = section.required ? section.name : `${section.name} (任意)`
@@ -32,19 +43,42 @@ export default function PromptSection({ section, value, onChange, type, benchVal
 
   const effectiveBench = benchValue !== undefined ? benchValue : defaultBenchContent
 
-  const autoResize = useCallback((ref) => {
+  const autoResize = useCallback((ref, respectUserMin = false) => {
     const ta = ref?.current
     if (!ta) return
     ta.style.height = 'auto'
-    ta.style.height = Math.max(ta.scrollHeight, 60) + 'px'
+    const contentHeight = Math.max(ta.scrollHeight, 60)
+    const finalHeight = respectUserMin ? Math.max(contentHeight, userMinHeight.current) : contentHeight
+    ta.style.height = finalHeight + 'px'
   }, [])
 
   useEffect(() => {
     if (isOpen) {
-      autoResize(textareaRef)
+      autoResize(textareaRef, true)
       if (benchEditMode) autoResize(benchRef)
     }
   }, [isOpen, value, effectiveBench, benchEditMode, autoResize])
+
+  // Track user manual resize via mouseup
+  useEffect(() => {
+    const ta = textareaRef.current
+    if (!ta || !isOpen) return
+    const handleMouseUp = () => {
+      const h = ta.offsetHeight
+      if (h > userMinHeight.current) {
+        userMinHeight.current = h
+      }
+    }
+    ta.addEventListener('mouseup', handleMouseUp)
+    return () => ta.removeEventListener('mouseup', handleMouseUp)
+  }, [isOpen])
+
+  // Compute active tags set for bench filtering
+  const activeTagsSet = useMemo(() => {
+    if (!value || !value.trim()) return new Set()
+    const tags = value.split(',').map(t => normalizeTag(t)).filter(Boolean)
+    return new Set(tags)
+  }, [value])
 
   const handleBenchTagClick = (tag) => {
     const trimmedTag = tag.trim()
@@ -61,6 +95,11 @@ export default function PromptSection({ section, value, onChange, type, benchVal
   }, [effectiveBench])
 
   const hasBench = benchTags.length > 0 || benchEditMode
+
+  // Comment highlighting
+  const hasComments = useMemo(() => {
+    return parseComments(value).some(s => s.type === 'comment')
+  }, [value])
 
   const tokenCount = useMemo(() => estimateTokens(value), [value])
   const tokenColorClass = tokenCount > 75
@@ -92,11 +131,17 @@ export default function PromptSection({ section, value, onChange, type, benchVal
             {/* Left Pane: Main textarea */}
             <div className={hasBench ? 'w-[72%]' : 'w-full'} style={{ flexShrink: 0 }}>
               <div className="relative">
+                {hasComments && <HighlightOverlay text={value} textareaRef={textareaRef} />}
                 <textarea
                   ref={textareaRef}
                   value={value}
                   onChange={e => onChange(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 pr-20 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors resize-none font-mono leading-relaxed"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 pr-20 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors font-mono leading-relaxed"
+                  style={{
+                    resize: 'vertical',
+                    overflow: 'hidden',
+                    ...(hasComments ? { color: 'transparent', caretColor: '#f3f4f6' } : {}),
+                  }}
                   placeholder={`${section.name} tags...`}
                   rows={2}
                 />
@@ -110,26 +155,31 @@ export default function PromptSection({ section, value, onChange, type, benchVal
             {/* Right Pane: Bench zone */}
             {hasBench && (
               <div className="w-[28%] flex-shrink-0 flex flex-col">
-                {/* Clickable tags */}
                 <div className="bg-gray-800/70 border border-gray-700 rounded-lg p-1.5 flex-1 min-h-[60px] max-h-[120px] overflow-y-auto">
                   {benchTags.length > 0 ? (
                     <div className="flex flex-wrap gap-0.5">
-                      {benchTags.map((tag, i) => (
-                        <button
-                          key={`${tag}-${i}`}
-                          onClick={() => handleBenchTagClick(tag)}
-                          className="text-[11px] px-1 py-0.5 bg-gray-700/60 hover:bg-blue-600/40 hover:text-blue-200 text-gray-400 rounded transition-colors cursor-pointer whitespace-nowrap leading-tight"
-                          title={`Click to add: ${tag}`}
-                        >
-                          {tag}
-                        </button>
-                      ))}
+                      {benchTags.map((tag, i) => {
+                        const isUsed = activeTagsSet.has(normalizeTag(tag))
+                        return (
+                          <button
+                            key={`${tag}-${i}`}
+                            onClick={isUsed ? undefined : () => handleBenchTagClick(tag)}
+                            className={`text-[11px] px-1 py-0.5 rounded transition-colors whitespace-nowrap leading-tight ${
+                              isUsed
+                                ? 'opacity-30 line-through bg-gray-700/60 text-gray-400 cursor-default'
+                                : 'bg-gray-700/60 hover:bg-blue-600/40 hover:text-blue-200 text-gray-400 cursor-pointer'
+                            }`}
+                            title={isUsed ? `Already used: ${tag}` : `Click to add: ${tag}`}
+                          >
+                            {tag}
+                          </button>
+                        )
+                      })}
                     </div>
                   ) : (
                     <span className="text-xs text-gray-600 italic">Empty</span>
                   )}
                 </div>
-                {/* Edit toggle + textarea */}
                 {benchEditMode ? (
                   <div className="mt-1">
                     <textarea
