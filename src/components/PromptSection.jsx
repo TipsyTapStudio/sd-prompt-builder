@@ -34,7 +34,9 @@ function parseBenchItems(text) {
     const trimmed = part.trim()
     if (!trimmed) continue
     if (trimmed.startsWith('//')) {
-      items.push({ type: 'comment', text: trimmed })
+      // Strip decorative dashes: "// --- hair color ---" → "hair color"
+      const label = trimmed.replace(/^\/\/\s*-*\s*/, '').replace(/\s*-*\s*$/, '').trim()
+      items.push({ type: 'comment', text: trimmed, label: label || trimmed })
     } else {
       items.push({ type: 'tag', text: trimmed })
     }
@@ -326,10 +328,10 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   <div className="flex flex-wrap gap-0.5">
                     {benchItems.map((item, i) => {
                       if (item.type === 'comment') {
-                        // Render comment as separator label
                         return (
-                          <div key={`comment-${i}`} className="w-full mt-1 mb-0.5 first:mt-0">
-                            <span className="text-[10px] text-green-600/70 font-mono">{item.text}</span>
+                          <div key={`comment-${i}`} className="w-full flex items-center gap-1 py-0.5 px-1 select-none pointer-events-none">
+                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 flex-shrink-0" />
+                            <span className="text-[10px] leading-none text-zinc-500 truncate">{item.label}</span>
                           </div>
                         )
                       }
