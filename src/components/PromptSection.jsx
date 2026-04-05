@@ -351,8 +351,15 @@ export default function PromptSection({ section, value, onChange, type, benchVal
     if (!translator?.isAvailable || !value?.trim() || type !== 'positive') return
     setIsTranslating(true)
     const cleaned = stripComments(value).trim()
-    const result = await translator.translate(cleaned)
-    setTranslatedText(result)
+    // Translate line by line to preserve structure
+    const lines = cleaned.split('\n').map(l => l.trim())
+    const results = []
+    for (const line of lines) {
+      if (!line) { results.push(''); continue }
+      const result = await translator.translate(line)
+      results.push(result)
+    }
+    setTranslatedText(results.join('\n'))
     setIsTranslating(false)
   }, [translator, value, type])
 
@@ -380,21 +387,6 @@ export default function PromptSection({ section, value, onChange, type, benchVal
           <span className="text-sm font-medium text-gray-200">{label}</span>
         </div>
         <div className="flex items-center gap-2">
-          {/* Translate button (Positive, open, translator available) */}
-          {type === 'positive' && translator?.isAvailable && isOpen && (
-            <button onClick={(e) => { e.stopPropagation(); handleTranslate() }}
-              disabled={isTranslating || !value?.trim()}
-              className={`px-1.5 py-0.5 text-[11px] rounded border transition-colors cursor-pointer ${
-                isTranslating
-                  ? 'border-gray-600 text-gray-500 cursor-default'
-                  : translatedText
-                    ? 'border-green-700 text-green-500 hover:border-green-600 hover:text-green-400'
-                    : 'border-gray-600 text-gray-400 hover:border-blue-500 hover:text-blue-400'
-              }`}
-              title="このセクションを翻訳">
-              {isTranslating ? '...' : '翻訳'}
-            </button>
-          )}
           {!isOpen && tokenCount > 0 && (
             <span className={`text-xs ${tokenColorClass}`}>
               {'\u2248'} {tokenCount} tokens
@@ -441,9 +433,27 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   {'\u2248'}{tokenCount}/75
                 </span>
               </div>
-              {/* Translation result (per-section) */}
+              {/* Translation (per-section, Positive only) */}
+              {type === 'positive' && translator?.isAvailable && (
+                <div className="mt-1 flex items-start gap-2">
+                  <button onClick={handleTranslate}
+                    disabled={isTranslating || !value?.trim()}
+                    className={`flex-shrink-0 px-2 py-0.5 text-[11px] rounded border transition-colors ${
+                      isTranslating
+                        ? 'border-gray-600 text-gray-500 cursor-default'
+                        : 'border-gray-600 text-gray-400 hover:border-blue-500 hover:text-blue-400 cursor-pointer'
+                    }`}>
+                    {isTranslating ? '翻訳中...' : '翻訳'}
+                  </button>
+                  {translator?.error && (
+                    <span className="text-[10px] text-gray-500">
+                      {translator.error}
+                    </span>
+                  )}
+                </div>
+              )}
               {translatedText && (
-                <div className="mt-0.5 px-3 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
+                <div className="mt-0.5 px-1 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
                   {translatedText}
                 </div>
               )}

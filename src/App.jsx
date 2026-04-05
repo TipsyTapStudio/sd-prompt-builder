@@ -4,6 +4,7 @@ import PromptSection from './components/PromptSection'
 import BreakDivider from './components/BreakDivider'
 import OutputPanel from './components/OutputPanel'
 import Sidebar, { SidebarIcon } from './components/Sidebar'
+import SaveConfirmModal from './components/SaveConfirmModal'
 import { usePromptBuilder } from './hooks/usePromptBuilder'
 import { useStorage, saveDraft, loadDraft, clearDraft } from './hooks/useStorage'
 import { useTranslator, PROVIDERS } from './hooks/useTranslator'
@@ -94,9 +95,10 @@ export default function App() {
   const [currentId, setCurrentId] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [titleMenuOpen, setTitleMenuOpen] = useState(false)
-  const [translationProvider, setTranslationProvider] = useState(PROVIDERS.MYMEMORY)
+  const [translationProvider, setTranslationProvider] = useState(PROVIDERS.AUTO)
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState(null) // snapshot of last saved state
-  const [saveFlash, setSaveFlash] = useState(false) // brief "saved" feedback
+  const [saveFlash, setSaveFlash] = useState(false)
+  const [showSaveModal, setShowSaveModal] = useState(false)
 
   const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
   const translator = useTranslator(translationProvider)
@@ -181,27 +183,39 @@ export default function App() {
     setNegativeSections(prev => ({ ...prev, [key]: value }))
   }, [])
 
+  const doSave = (asNew = false) => {
+    const saveId = asNew ? null : currentId
+    const saveTitle = asNew ? `${title || '無題'} のコピー` : title
+    const data = {
+      id: saveId,
+      title: saveTitle, description, sections,
+      negative_sections: negativeSections,
+    }
+    const id = savePrompt(data)
+    setCurrentId(id)
+    if (asNew) setTitle(saveTitle)
+    setLastSavedSnapshot({
+      ...data, id,
+      title: saveTitle, description, sections, negative_sections: negativeSections,
+      created_at: asNew ? new Date().toISOString() : (lastSavedSnapshot?.created_at || new Date().toISOString()),
+      updated_at: new Date().toISOString(),
+    })
+    setSaveFlash(true)
+    setTimeout(() => setSaveFlash(false), 2000)
+    setShowSaveModal(false)
+  }
+
   const handleSave = () => {
     if (!title.trim()) {
       setTitleMenuOpen(true)
       return
     }
-    const data = {
-      id: currentId,
-      title, description, sections,
-      negative_sections: negativeSections,
+    // New prompt: save directly. Existing prompt with changes: show modal.
+    if (isNewPrompt) {
+      doSave(false)
+    } else if (isDirty) {
+      setShowSaveModal(true)
     }
-    const id = savePrompt(data)
-    setCurrentId(id)
-    // Update snapshot
-    setLastSavedSnapshot({
-      ...data, id,
-      title, description, sections, negative_sections: negativeSections,
-      updated_at: new Date().toISOString(),
-    })
-    // Flash feedback
-    setSaveFlash(true)
-    setTimeout(() => setSaveFlash(false), 2000)
   }
 
   const handleLoad = (prompt) => {
@@ -411,6 +425,16 @@ export default function App() {
             onSectionsUpdate={setSections} onNegativeSectionsUpdate={setNegativeSections} />
         </div>
       </div>
+
+      {/* Save confirmation modal */}
+      {showSaveModal && (
+        <SaveConfirmModal
+          title={title}
+          onOverwrite={() => doSave(false)}
+          onSaveAsNew={() => doSave(true)}
+          onCancel={() => setShowSaveModal(false)}
+        />
+      )}
     </div>
   )
 }
