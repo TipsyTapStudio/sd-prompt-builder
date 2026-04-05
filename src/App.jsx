@@ -6,6 +6,7 @@ import OutputPanel from './components/OutputPanel'
 import SaveModal from './components/SaveModal'
 import { usePromptBuilder } from './hooks/usePromptBuilder'
 import { useStorage } from './hooks/useStorage'
+import { useTranslator } from './hooks/useTranslator'
 
 const createEmptySections = () => {
   const sections = {}
@@ -61,6 +62,7 @@ export default function App() {
   }
 
   const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
+  const translator = useTranslator()
   const {
     prompts, savePrompt, loadPrompt, deletePrompt,
     exportToJson, exportToMarkdown, importFromJson,
@@ -217,6 +219,7 @@ export default function App() {
               type="positive"
               benchValue={bench[section.key]}
               onBenchChange={updateBench}
+              translator={translator}
             />
             {section.key === sectionsData.breakAfter && <BreakDivider />}
           </div>

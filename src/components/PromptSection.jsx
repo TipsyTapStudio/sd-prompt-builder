@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import presetsData from '../data/presets.json'
 import HighlightOverlay from './HighlightOverlay'
 import { parseComments, stripComments } from '../utils/commentParser'
+import { useDebouncedTranslation } from '../hooks/useTranslator'
 
 function estimateTokens(text) {
   if (!text || !text.trim()) return 0
@@ -97,7 +98,7 @@ function formattedToBenchText(formatted) {
   return parts.join(', ')
 }
 
-export default function PromptSection({ section, value, onChange, type, benchValue, onBenchChange }) {
+export default function PromptSection({ section, value, onChange, type, benchValue, onBenchChange, translator }) {
   const [isOpen, setIsOpen] = useState(section.defaultOpen)
   const [benchOpen, setBenchOpen] = useState(true)
   const [benchEditMode, setBenchEditMode] = useState(false)
@@ -342,6 +343,13 @@ export default function PromptSection({ section, value, onChange, type, benchVal
     return tags.some(t => !benchTagsNormalized.has(t))
   }, [value, benchTagsNormalized])
 
+  // Translation (Positive sections only, when translator available)
+  const cleanTextForTranslation = useMemo(() => {
+    if (type !== 'positive' || !translator?.isAvailable) return ''
+    return stripComments(value).trim()
+  }, [value, type, translator?.isAvailable])
+  const translatedText = useDebouncedTranslation(cleanTextForTranslation, translator || { isAvailable: false, translate: async () => '' })
+
   const tokenCount = useMemo(() => estimateTokens(value), [value])
   const tokenColorClass = tokenCount > 75
     ? 'text-red-400'
@@ -407,6 +415,12 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   {'\u2248'}{tokenCount}/75
                 </span>
               </div>
+              {/* Translation (Positive only, Chrome Translator API) */}
+              {translatedText && (
+                <div className="mt-0.5 text-[10px] text-gray-500/70 font-mono leading-relaxed truncate" title={translatedText}>
+                  {translatedText}
+                </div>
+              )}
             </div>
 
             {/* Resizable divider */}
