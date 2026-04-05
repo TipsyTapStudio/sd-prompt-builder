@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from 'react'
 import sectionsData from '../data/sections.json'
+import { parseComments } from '../utils/commentParser'
 
 function CopyIcon({ size = 16 }) {
   return (
@@ -27,9 +28,7 @@ function CopyIconButton({ text, label }) {
       await navigator.clipboard.writeText(text)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // fallback
-    }
+    } catch { /* fallback */ }
   }
 
   return (
@@ -57,15 +56,13 @@ function CornerCopyButton({ text }) {
       await navigator.clipboard.writeText(text)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // fallback
-    }
+    } catch { /* fallback */ }
   }
 
   return (
     <button
       onClick={handleCopy}
-      className={`absolute top-2 right-2 p-1.5 rounded transition-colors cursor-pointer ${
+      className={`absolute top-2 right-2 p-1.5 rounded transition-colors cursor-pointer z-10 ${
         copied
           ? 'bg-green-600 text-white'
           : 'bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200'
@@ -77,10 +74,6 @@ function CornerCopyButton({ text }) {
   )
 }
 
-/**
- * Build preview text with section headers from raw section data.
- * Always includes ### headers for display purposes.
- */
 function buildPreviewText(sections, sectionDefs, isPositive) {
   const parts = []
 
@@ -116,9 +109,6 @@ function buildPreviewText(sections, sectionDefs, isPositive) {
   return parts.join('\n')
 }
 
-/**
- * Parse preview text back into section key-value pairs.
- */
 function parsePreviewText(text, sectionDefs) {
   const result = {}
   let currentKey = null
@@ -141,9 +131,6 @@ function parsePreviewText(text, sectionDefs) {
   return result
 }
 
-/**
- * Build the raw prompt text (for copying) without ### headers.
- */
 function buildCopyText(sections, sectionDefs, isPositive) {
   const parts = []
 
@@ -180,9 +167,25 @@ function buildCopyText(sections, sectionDefs, isPositive) {
 }
 
 /**
- * Render styled preview lines with colored headers and BREAK.
+ * Render a single line with inline comment coloring.
+ * Comments (// and /* *​/) within a line are rendered in green with smaller font.
  */
-function StyledPreview({ text }) {
+function renderLineWithComments(line) {
+  const segments = parseComments(line)
+  return segments.map((seg, j) => {
+    if (seg.type === 'comment') {
+      return (
+        <span key={j} className="text-green-600/70 text-[10px]">{seg.text}</span>
+      )
+    }
+    return <span key={j}>{seg.text}</span>
+  })
+}
+
+/**
+ * Render styled preview with colored headers, BREAK, and comments.
+ */
+function StyledPreview({ text, showHeaders, showComments }) {
   if (!text) {
     return <span className="text-gray-600 text-xs">(input to see preview)</span>
   }
@@ -191,17 +194,41 @@ function StyledPreview({ text }) {
   return (
     <div className="text-xs font-mono leading-relaxed">
       {lines.map((line, i) => {
+        // Header lines
         if (line.match(/^###\s+/)) {
+          if (!showHeaders) return null
           return (
-            <div key={i} className="text-gray-500">
+            <div key={i} className="text-gray-500 text-[10px]">
               {line}
             </div>
           )
         }
+        // BREAK
         if (line.trim() === 'BREAK') {
           return (
             <div key={i} className="text-orange-400 font-bold">
               BREAK
+            </div>
+          )
+        }
+        // Content lines — check for comments
+        const hasComment = line.includes('//') || line.includes('/*')
+        if (hasComment && !showComments) {
+          // Strip comments from this line for display
+          const segments = parseComments(line)
+          const cleanParts = segments.filter(s => s.type === 'normal').map(s => s.text).join('')
+          const cleaned = cleanParts.trim()
+          if (!cleaned) return null // line was entirely a comment
+          return (
+            <div key={i} className="text-gray-200">
+              {cleaned}
+            </div>
+          )
+        }
+        if (hasComment) {
+          return (
+            <div key={i} className="text-gray-200">
+              {renderLineWithComments(line)}
             </div>
           )
         }
@@ -220,17 +247,18 @@ export default function OutputPanel({
   negativePrompt,
   includeHeaders,
   onToggleHeaders,
+  includeComments,
+  onToggleComments,
   sections,
   negativeSections,
   onSectionsUpdate,
   onNegativeSectionsUpdate,
 }) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [activeTab, setActiveTab] = useState('positive') // 'positive' | 'negative'
+  const [activeTab, setActiveTab] = useState('positive')
   const [isEditing, setIsEditing] = useState(false)
   const [editText, setEditText] = useState('')
 
-  // Build preview texts from raw section data
   const positivePreview = useMemo(
     () => buildPreviewText(sections, sectionsData.positive, true),
     [sections]
@@ -240,7 +268,6 @@ export default function OutputPanel({
     [negativeSections]
   )
 
-  // Copy texts (without headers)
   const positiveCopyText = useMemo(
     () => buildCopyText(sections, sectionsData.positive, true),
     [sections]
@@ -253,7 +280,6 @@ export default function OutputPanel({
   const currentPreview = activeTab === 'positive' ? positivePreview : negativePreview
   const currentCopyText = activeTab === 'positive' ? positiveCopyText : negativeCopyText
 
-  // Collapsed preview: first 50 chars of positive prompt
   const collapsedPreview = useMemo(() => {
     const text = positiveCopyText
     if (!text) return ''
@@ -270,7 +296,6 @@ export default function OutputPanel({
     const parsed = parsePreviewText(editText, sectionDefs)
 
     if (activeTab === 'positive') {
-      // Merge parsed values with existing sections (keep keys not in parsed as empty)
       const updated = {}
       for (const s of sectionsData.positive) {
         updated[s.key] = parsed[s.key] !== undefined ? parsed[s.key] : ''
@@ -299,18 +324,28 @@ export default function OutputPanel({
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-xs text-gray-400 flex-shrink-0">{isExpanded ? '▼' : '▲'}</span>
+          <span className="text-xs text-gray-400 flex-shrink-0">{isExpanded ? '\u25BC' : '\u25B2'}</span>
           <span className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex-shrink-0">
             preview
           </span>
-          <label className="flex items-center gap-1.5 cursor-pointer flex-shrink-0" onClick={e => e.stopPropagation()}>
+          {/* Toggle checkboxes */}
+          <label className="flex items-center gap-1 cursor-pointer flex-shrink-0" onClick={e => e.stopPropagation()}>
             <input
               type="checkbox"
               checked={includeHeaders}
               onChange={onToggleHeaders}
               className="w-3 h-3 rounded border-gray-600 bg-gray-800 accent-blue-500"
             />
-            <span className="text-xs text-gray-500">headers</span>
+            <span className="text-[10px] text-gray-500">headers</span>
+          </label>
+          <label className="flex items-center gap-1 cursor-pointer flex-shrink-0" onClick={e => e.stopPropagation()}>
+            <input
+              type="checkbox"
+              checked={includeComments}
+              onChange={onToggleComments}
+              className="w-3 h-3 rounded border-gray-600 bg-gray-800 accent-blue-500"
+            />
+            <span className="text-[10px] text-gray-500">comments</span>
           </label>
           {/* Collapsed preview text */}
           {!isExpanded && collapsedPreview && (
@@ -354,7 +389,6 @@ export default function OutputPanel({
 
           {/* Preview area */}
           <div className="relative bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
-            {/* Corner copy button */}
             <CornerCopyButton text={includeHeaders ? (activeTab === 'positive' ? positivePrompt : negativePrompt) : currentCopyText} />
 
             {isEditing ? (
@@ -385,7 +419,11 @@ export default function OutputPanel({
                 className="p-3 pr-10 cursor-text min-h-[60px]"
                 onClick={handleStartEdit}
               >
-                <StyledPreview text={currentPreview} />
+                <StyledPreview
+                  text={currentPreview}
+                  showHeaders={includeHeaders}
+                  showComments={includeComments}
+                />
               </div>
             )}
           </div>

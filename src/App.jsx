@@ -25,6 +25,7 @@ export default function App() {
   const [sections, setSections] = useState(createEmptySections)
   const [negativeSections, setNegativeSections] = useState(createEmptyNegativeSections)
   const [includeHeaders, setIncludeHeaders] = useState(false)
+  const [includeComments, setIncludeComments] = useState(true)
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [currentId, setCurrentId] = useState(null)
   const [titleError, setTitleError] = useState(false)
@@ -194,6 +195,8 @@ export default function App() {
           negativePrompt={negativePrompt}
           includeHeaders={includeHeaders}
           onToggleHeaders={() => setIncludeHeaders(prev => !prev)}
+          includeComments={includeComments}
+          onToggleComments={() => setIncludeComments(prev => !prev)}
           sections={sections}
           negativeSections={negativeSections}
           onSectionsUpdate={setSections}
