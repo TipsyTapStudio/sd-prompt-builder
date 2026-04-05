@@ -128,7 +128,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-950 text-gray-200 pb-16">
       {/* Sticky Header */}
       <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
-        <div className="max-w-4xl mx-auto px-4 py-2">
+        <div className="max-w-5xl mx-auto px-4 py-2">
           <div className="flex items-center justify-between">
             <h1 className="text-lg font-bold text-gray-100">SD Prompt Builder</h1>
             <div className="flex items-center gap-2">
@@ -183,7 +183,7 @@ export default function App() {
         </div>
       </div>
 
-      <div className="max-w-4xl mx-auto px-4 pt-4">
+      <div className="max-w-5xl mx-auto px-4 pt-4">
         {/* Title & Description */}
         <div className="flex gap-3 mb-4">
           <input
@@ -244,7 +244,7 @@ export default function App() {
       </div>
 
       {/* Sticky Output Panel */}
-      <div className="max-w-4xl mx-auto px-4">
+      <div className="max-w-5xl mx-auto px-4">
         <OutputPanel
           positivePrompt={positivePrompt}
           negativePrompt={negativePrompt}

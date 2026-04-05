@@ -104,7 +104,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
   const [benchEditText, setBenchEditText] = useState('')
   const [selectedChips, setSelectedChips] = useState(new Set())
   const [dragIndex, setDragIndex] = useState(null)
-  const [dividerWidth, setDividerWidth] = useState(72) // left pane percentage
+  const [dividerWidth, setDividerWidth] = useState(62) // left pane percentage
   const textareaRef = useRef(null)
   const benchRef = useRef(null)
   const userMinHeight = useRef(0)
@@ -274,7 +274,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
       if (!dividerDragging.current || !containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
       const pct = ((e.clientX - rect.left) / rect.width) * 100
-      setDividerWidth(Math.max(40, Math.min(85, pct)))
+      setDividerWidth(Math.max(35, Math.min(80, pct)))
     }
 
     const onMouseUp = () => {
@@ -320,7 +320,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
           {isOpen && hasBench && (
             <button
               onClick={(e) => { e.stopPropagation(); setBenchOpen(!benchOpen) }}
-              className={`text-[10px] px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
+              className={`text-[11px] px-1.5 py-0.5 rounded transition-colors cursor-pointer ${
                 benchOpen
                   ? 'bg-gray-700 text-gray-400 hover:text-gray-200'
                   : 'bg-gray-800 text-gray-600 hover:text-gray-400'
@@ -381,7 +381,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                           // Group header: bold, slightly larger, with line
                           return (
                             <div key={`comment-${i}`} className="w-full flex items-center gap-1 pt-1.5 pb-0.5 px-1 select-none pointer-events-none first:pt-0">
-                              <span className="text-[10px] leading-none text-zinc-400 font-bold truncate">{item.label}</span>
+                              <span className="text-[11px] leading-none text-zinc-400 font-bold truncate">{item.label}</span>
                               <span className="flex-1 h-px bg-zinc-700" />
                             </div>
                           )
@@ -389,7 +389,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                         return (
                           <div key={`comment-${i}`} className="w-full flex items-center gap-1 py-0.5 px-1 select-none pointer-events-none">
                             <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 flex-shrink-0" />
-                            <span className="text-[10px] leading-none text-zinc-500 truncate">{item.label}</span>
+                            <span className="text-[11px] leading-none text-zinc-500 truncate">{item.label}</span>
                           </div>
                         )
                       }
@@ -407,7 +407,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                           onDrop={(e) => handleDrop(e, i)}
                           onDragEnd={handleDragEnd}
                           onClick={(e) => !isUsed && handleBenchTagClick(item.text, i, e)}
-                          className={`text-[11px] px-1 py-0.5 rounded transition-colors whitespace-nowrap leading-tight select-none ${
+                          className={`text-xs px-1.5 py-0.5 rounded transition-colors whitespace-nowrap leading-tight select-none ${
                             isDragging
                               ? 'opacity-40 bg-blue-600/30 text-blue-300'
                               : isSelected
@@ -430,7 +430,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   {/* Selected chips indicator */}
                   {selectedChips.size > 0 && (
                     <div className="mt-1.5 pt-1 border-t border-gray-700 flex items-center gap-1">
-                      <span className="text-[10px] text-blue-400">{selectedChips.size} selected</span>
+                      <span className="text-[11px] text-blue-400">{selectedChips.size} selected</span>
                       <button
                         onClick={() => {
                           // Insert all selected
@@ -443,13 +443,13 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                           for (const t of tags) insertTagAtCursor(t)
                           setSelectedChips(new Set())
                         }}
-                        className="text-[10px] text-blue-400 hover:text-blue-300 cursor-pointer underline"
+                        className="text-[11px] text-blue-400 hover:text-blue-300 cursor-pointer underline"
                       >
                         insert all
                       </button>
                       <button
                         onClick={() => setSelectedChips(new Set())}
-                        className="text-[10px] text-gray-500 hover:text-gray-300 cursor-pointer"
+                        className="text-[11px] text-gray-500 hover:text-gray-300 cursor-pointer"
                       >
                         clear
                       </button>
@@ -473,7 +473,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                         onBenchChange(section.key, formattedToBenchText(benchEditText))
                         setBenchEditMode(false)
                       }}
-                      className="text-[10px] text-gray-500 hover:text-gray-300 mt-0.5 cursor-pointer"
+                      className="text-[11px] text-gray-500 hover:text-gray-300 mt-0.5 cursor-pointer"
                     >
                       閉じる
                     </button>
@@ -484,7 +484,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                       setBenchEditText(benchTextToFormatted(effectiveBench))
                       setBenchEditMode(true)
                     }}
-                    className="mt-1 text-[10px] text-gray-600 hover:text-gray-400 cursor-pointer text-left"
+                    className="mt-1 text-[11px] text-gray-600 hover:text-gray-400 cursor-pointer text-left"
                     title="ベンチを編集"
                   >
                     ✎ 編集
