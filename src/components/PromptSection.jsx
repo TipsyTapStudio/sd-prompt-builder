@@ -415,9 +415,9 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   {'\u2248'}{tokenCount}/75
                 </span>
               </div>
-              {/* Translation (Positive only, Chrome Translator API) */}
+              {/* Translation (Positive only) */}
               {translatedText && (
-                <div className="mt-0.5 text-[10px] text-gray-500/70 font-mono leading-relaxed truncate" title={translatedText}>
+                <div className="mt-0.5 px-3 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
                   {translatedText}
                 </div>
               )}

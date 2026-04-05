@@ -1,59 +1,109 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 
+/** Race a promise against a timeout */
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms)),
+  ])
+}
+
 /**
- * Hook for Chrome's built-in Translator API (en → ja).
- * Returns { translate, isAvailable, isLoading } where translate(text) returns translated text.
- * Falls back gracefully: isAvailable=false if API doesn't exist or language pair unsupported.
+ * MyMemory Translation API (free, no key required, CORS-friendly)
+ * Limit: 5,000 chars/day (anonymous), 50,000 chars/day (with email)
  */
-export function useTranslator() {
+async function translateWithMyMemory(text) {
+  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|ja`
+  const res = await withTimeout(fetch(url), 8000)
+  if (!res.ok) throw new Error(`MyMemory API error: ${res.status}`)
+  const data = await res.json()
+  if (data.responseStatus === 200 && data.responseData?.translatedText) {
+    return data.responseData.translatedText
+  }
+  throw new Error('MyMemory: no translation returned')
+}
+
+/**
+ * Chrome built-in Translator API (en → ja, fully local)
+ */
+async function initChromeTranslator() {
+  if (!('Translator' in self)) return null
+
+  const availability = await withTimeout(
+    Translator.availability({ sourceLanguage: 'en', targetLanguage: 'ja' }),
+    5000
+  )
+
+  if (availability === 'unavailable') return null
+
+  return await withTimeout(
+    Translator.create({ sourceLanguage: 'en', targetLanguage: 'ja' }),
+    15000
+  )
+}
+
+// Provider names
+export const PROVIDERS = {
+  AUTO: 'auto',       // Chrome → MyMemory fallback
+  CHROME: 'chrome',   // Chrome only
+  MYMEMORY: 'mymemory', // MyMemory only
+  OFF: 'off',         // Disabled
+}
+
+/**
+ * Main translator hook with provider selection.
+ */
+export function useTranslator(provider = PROVIDERS.AUTO) {
   const [isAvailable, setIsAvailable] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const translatorRef = useRef(null)
+  const [activeProvider, setActiveProvider] = useState(null) // 'chrome' | 'mymemory' | null
+  const chromeRef = useRef(null)
 
   useEffect(() => {
+    if (provider === PROVIDERS.OFF) {
+      setIsAvailable(false)
+      setIsLoading(false)
+      setActiveProvider(null)
+      return
+    }
+
     let cancelled = false
 
     async function init() {
-      try {
-        // Feature detection
-        if (!('Translator' in self)) {
-          setIsAvailable(false)
+      // Try Chrome first (if auto or chrome)
+      if (provider === PROVIDERS.AUTO || provider === PROVIDERS.CHROME) {
+        try {
+          const translator = await initChromeTranslator()
+          if (cancelled) {
+            translator?.destroy()
+            return
+          }
+          if (translator) {
+            chromeRef.current = translator
+            setActiveProvider('chrome')
+            setIsAvailable(true)
+            setIsLoading(false)
+            return
+          }
+        } catch (err) {
+          console.warn('Chrome Translator unavailable:', err.message)
+        }
+      }
+
+      // Fallback to MyMemory (if auto or mymemory)
+      if (provider === PROVIDERS.AUTO || provider === PROVIDERS.MYMEMORY) {
+        if (!cancelled) {
+          setActiveProvider('mymemory')
+          setIsAvailable(true)
           setIsLoading(false)
           return
         }
+      }
 
-        // Check en→ja availability
-        const availability = await Translator.availability({
-          sourceLanguage: 'en',
-          targetLanguage: 'ja',
-        })
-
-        if (cancelled) return
-
-        if (availability === 'unavailable') {
-          setIsAvailable(false)
-          setIsLoading(false)
-          return
-        }
-
-        // Create translator (may trigger model download)
-        const translator = await Translator.create({
-          sourceLanguage: 'en',
-          targetLanguage: 'ja',
-        })
-
-        if (cancelled) {
-          translator.destroy()
-          return
-        }
-
-        translatorRef.current = translator
-        setIsAvailable(true)
-        setIsLoading(false)
-      } catch (err) {
-        console.warn('Translator API init failed:', err)
+      if (!cancelled) {
         setIsAvailable(false)
         setIsLoading(false)
+        setActiveProvider(null)
       }
     }
 
@@ -61,29 +111,34 @@ export function useTranslator() {
 
     return () => {
       cancelled = true
-      if (translatorRef.current) {
-        translatorRef.current.destroy()
-        translatorRef.current = null
+      if (chromeRef.current) {
+        chromeRef.current.destroy()
+        chromeRef.current = null
       }
     }
-  }, [])
+  }, [provider])
 
   const translate = useCallback(async (text) => {
-    if (!translatorRef.current || !text?.trim()) return ''
+    if (!text?.trim()) return ''
     try {
-      return await translatorRef.current.translate(text)
+      if (activeProvider === 'chrome' && chromeRef.current) {
+        return await withTimeout(chromeRef.current.translate(text), 10000)
+      }
+      if (activeProvider === 'mymemory') {
+        return await translateWithMyMemory(text)
+      }
+      return ''
     } catch (err) {
-      console.warn('Translation failed:', err)
+      console.warn(`Translation failed (${activeProvider}):`, err.message)
       return ''
     }
-  }, [])
+  }, [activeProvider])
 
-  return { translate, isAvailable, isLoading }
+  return { translate, isAvailable, isLoading, activeProvider }
 }
 
 /**
  * Hook that debounces translation of a text value.
- * Returns the translated string (or '' if unavailable/pending).
  */
 export function useDebouncedTranslation(text, translator, delay = 500) {
   const [translated, setTranslated] = useState('')

@@ -6,7 +6,7 @@ import OutputPanel from './components/OutputPanel'
 import SaveModal from './components/SaveModal'
 import { usePromptBuilder } from './hooks/usePromptBuilder'
 import { useStorage } from './hooks/useStorage'
-import { useTranslator } from './hooks/useTranslator'
+import { useTranslator, PROVIDERS } from './hooks/useTranslator'
 
 const createEmptySections = () => {
   const sections = {}
@@ -31,6 +31,7 @@ export default function App() {
   const [currentId, setCurrentId] = useState(null)
   const [titleError, setTitleError] = useState(false)
   const [showSettings, setShowSettings] = useState(false)
+  const [translationProvider, setTranslationProvider] = useState(PROVIDERS.MYMEMORY)
   const titleRef = useRef(null)
   const settingsRef = useRef(null)
 
@@ -62,7 +63,7 @@ export default function App() {
   }
 
   const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
-  const translator = useTranslator()
+  const translator = useTranslator(translationProvider)
   const {
     prompts, savePrompt, loadPrompt, deletePrompt,
     exportToJson, exportToMarkdown, importFromJson,
@@ -179,7 +180,36 @@ export default function App() {
                   ⚙
                 </button>
                 {showSettings && (
-                  <div className="absolute right-0 top-full mt-1 w-52 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
+                  <div className="absolute right-0 top-full mt-1 w-56 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-50">
+                    {/* Translation provider */}
+                    <div className="px-3 py-2 border-b border-gray-700">
+                      <div className="text-[11px] text-gray-500 mb-1">翻訳</div>
+                      <div className="flex gap-1">
+                        {[
+                          { key: PROVIDERS.AUTO, label: 'Auto' },
+                          { key: PROVIDERS.MYMEMORY, label: 'MyMemory' },
+                          { key: PROVIDERS.CHROME, label: 'Chrome' },
+                          { key: PROVIDERS.OFF, label: 'OFF' },
+                        ].map(({ key, label }) => (
+                          <button
+                            key={key}
+                            onClick={() => setTranslationProvider(key)}
+                            className={`px-1.5 py-0.5 text-[11px] rounded transition-colors cursor-pointer ${
+                              translationProvider === key
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-gray-700 text-gray-400 hover:text-gray-200'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {translator.activeProvider && (
+                        <div className="text-[10px] text-gray-600 mt-1">
+                          active: {translator.activeProvider}
+                        </div>
+                      )}
+                    </div>
                     <button
                       onClick={handleResetBench}
                       className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700 transition-colors cursor-pointer"
