@@ -6,7 +6,7 @@
     { "label": "Style / Aesthetic", "tags": "// --- illustration ---, anime style, cel shading, oil painting, painterly, watercolor, soft edges, // --- photo style ---, cinematic lighting, film grain, cinematic composition, // --- palette ---, pastel palette, soft coloring, vivid colors, muted tones," }
   ],
   "face_hair": [
-    { "label": "Face & Hair", "tags": "// --- hair color ---, (brown hair:1.3), (black hair:1.3), (blonde hair:1.3), (silver hair:1.3), (red hair:1.3), (pink hair:1.3), // --- hair length ---, long hair, medium hair, short hair, // --- hair style ---, (low twintails:1.3), (ponytail:1.3), (side braid:1.2), bun, messy hair, bangs, side bangs, // --- face / expression ---, smile, gentle smile, grin, serious expression, crying, blush, // --- eyes ---, looking at viewer, looking away, closed eyes, heterochromia," }
+    { "label": "Face & Hair", "tags": "// --- HAIR ---,  // --- color ---, (brown hair:1.3), (black hair:1.3), (blonde hair:1.3), (silver hair:1.3), (red hair:1.3), (pink hair:1.3), // --- length ---, long hair, medium hair, short hair, // --- style ---, (low twintails:1.3), (ponytail:1.3), (side braid:1.2), bun, messy hair, bangs, side bangs, // --- FACE ---,  // --- expression ---, smile, gentle smile, grin, serious expression, crying, blush, // --- eyes ---, looking at viewer, looking away, closed eyes, heterochromia, // --- features ---, 1 girl, mole under eye, freckles, red lips," }
   ],
   "body": [
     { "label": "Body", "tags": "// --- build ---, petite, slim waist, soft body, healthy body, athletic, // --- height ---, tall girl, slender, long legs, short, // --- chest ---, flat chest, small breasts, medium breasts, large breasts, // --- skin ---, tan, pale skin, wet skin, sweat," }

@@ -36,7 +36,9 @@ function parseBenchItems(text) {
     if (trimmed.startsWith('//')) {
       // Strip decorative dashes: "// --- hair color ---" → "hair color"
       const label = trimmed.replace(/^\/\/\s*-*\s*/, '').replace(/\s*-*\s*$/, '').trim()
-      items.push({ type: 'comment', text: trimmed, label: label || trimmed })
+      // ALL CAPS labels are group headers (e.g. HAIR, FACE)
+      const isGroup = label === label.toUpperCase() && label.length > 0 && /^[A-Z\s]+$/.test(label)
+      items.push({ type: 'comment', text: trimmed, label: label || trimmed, isGroup })
     } else {
       items.push({ type: 'tag', text: trimmed })
     }
@@ -373,6 +375,15 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   <div className="flex flex-wrap gap-0.5">
                     {benchItems.map((item, i) => {
                       if (item.type === 'comment') {
+                        if (item.isGroup) {
+                          // Group header: bold, slightly larger, with line
+                          return (
+                            <div key={`comment-${i}`} className="w-full flex items-center gap-1 pt-1.5 pb-0.5 px-1 select-none pointer-events-none first:pt-0">
+                              <span className="text-[10px] leading-none text-zinc-400 font-bold truncate">{item.label}</span>
+                              <span className="flex-1 h-px bg-zinc-700" />
+                            </div>
+                          )
+                        }
                         return (
                           <div key={`comment-${i}`} className="w-full flex items-center gap-1 py-0.5 px-1 select-none pointer-events-none">
                             <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 flex-shrink-0" />
