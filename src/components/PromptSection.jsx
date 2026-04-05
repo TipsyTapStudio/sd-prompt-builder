@@ -324,9 +324,23 @@ export default function PromptSection({ section, value, onChange, type, benchVal
   }, [])
 
   // Comment highlighting
-  const hasComments = useMemo(() => {
-    return parseComments(value).some(s => s.type === 'comment')
-  }, [value])
+  // Normalized set of all bench tags for overlay comparison
+  const benchTagsNormalized = useMemo(() => {
+    const set = new Set()
+    for (const item of benchItems) {
+      if (item.type === 'tag') set.add(normalizeTag(item.text))
+    }
+    return set
+  }, [benchItems])
+
+  // Check if overlay is needed (comments or non-bench tags exist)
+  const needsOverlay = useMemo(() => {
+    if (parseComments(value).some(s => s.type === 'comment')) return true
+    if (benchTagsNormalized.size === 0) return false
+    // Check if any tag is not in bench
+    const tags = value.split(',').map(t => normalizeTag(t)).filter(Boolean)
+    return tags.some(t => !benchTagsNormalized.has(t))
+  }, [value, benchTagsNormalized])
 
   const tokenCount = useMemo(() => estimateTokens(value), [value])
   const tokenColorClass = tokenCount > 75
@@ -375,7 +389,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
             {/* Left Pane: Main textarea */}
             <div style={{ width: benchOpen && hasBench ? `${dividerWidth}%` : '100%', flexShrink: 0 }}>
               <div className="relative">
-                {hasComments && <HighlightOverlay text={value} textareaRef={textareaRef} />}
+                {needsOverlay && <HighlightOverlay text={value} textareaRef={textareaRef} benchTagsSet={benchTagsNormalized} />}
                 <textarea
                   ref={textareaRef}
                   value={value}
@@ -384,7 +398,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   style={{
                     resize: 'vertical',
                     overflow: 'hidden',
-                    ...(hasComments ? { color: 'transparent', caretColor: '#f3f4f6' } : {}),
+                    ...(needsOverlay ? { color: 'transparent', caretColor: '#f3f4f6' } : {}),
                   }}
                   placeholder={`${section.name} tags...`}
                   rows={2}
