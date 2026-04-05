@@ -40,9 +40,10 @@ function TitleMenu({ title, description, onTitleChange, onDescriptionChange,
         </div>
         <div className="px-3 pb-2">
           <label className="text-[10px] text-gray-500 block mb-0.5">説明</label>
-          <input type="text" value={description} onChange={e => onDescriptionChange(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-xs text-gray-100 focus:outline-none focus:border-blue-500"
-            placeholder="メモ・コンテキスト" />
+          <textarea value={description} onChange={e => onDescriptionChange(e.target.value)}
+            className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1.5 text-xs text-gray-100 focus:outline-none focus:border-blue-500 resize-none leading-relaxed"
+            placeholder="メモ・コンテキスト"
+            rows={3} />
         </div>
         <div className="border-t border-gray-700 my-1" />
         <button onClick={() => { onCopyAsNew(); onClose() }}
