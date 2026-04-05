@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
 import PromptAnalysisModal from './PromptAnalysisModal'
+import SettingsModal from './SettingsModal'
 
 function DotsIcon({ size = 14 }) {
   return (
@@ -90,8 +91,7 @@ export default function Sidebar({
   const fileInputRef = useRef(null)
   const [contextMenu, setContextMenu] = useState(null)
   const [analysisModalOpen, setAnalysisModalOpen] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const settingsRef = useRef(null)
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false)
 
   const handleImport = async (e) => {
     const file = e.target.files[0]
@@ -198,66 +198,16 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* Bottom: Export + Translation + Settings */}
-      <div className="px-3 py-2 border-t border-gray-800/60 space-y-1.5">
+      {/* Bottom */}
+      <div className="px-3 py-2 border-t border-gray-800/60 space-y-1">
         <button onClick={onExportJson}
-          className="w-full px-2 py-1 text-[10px] bg-transparent hover:bg-white/[0.05] rounded text-gray-500 hover:text-gray-400 transition-colors cursor-pointer text-left">
+          className="w-full px-2 py-1.5 text-[11px] bg-transparent hover:bg-white/[0.05] rounded text-gray-500 hover:text-gray-400 transition-colors cursor-pointer text-left">
           Export JSON（全件バックアップ）
         </button>
-
-        {/* Translation engine */}
-        <div>
-          <div className="text-[10px] text-gray-600 mb-0.5">翻訳エンジン</div>
-          <div className="flex gap-0.5">
-            {[
-              { key: PROVIDERS.AUTO, label: 'Auto' },
-              { key: PROVIDERS.MYMEMORY, label: 'MyMem' },
-              { key: PROVIDERS.CHROME, label: 'Chrome' },
-              { key: PROVIDERS.OFF, label: 'OFF' },
-            ].map(({ key, label }) => (
-              <button key={key} onClick={() => onSetTranslationProvider(key)}
-                className={`flex-1 px-1 py-0.5 text-[10px] rounded transition-colors cursor-pointer ${
-                  translationProvider === key
-                    ? 'bg-blue-600/80 text-white'
-                    : 'bg-transparent text-gray-600 hover:text-gray-400'
-                }`}>{label}</button>
-            ))}
-          </div>
-        </div>
-
-        {/* Settings gear */}
-        <div className="relative" ref={settingsRef}>
-          <button onClick={() => setShowSettings(!showSettings)}
-            className="w-full px-2 py-1 text-[10px] bg-transparent hover:bg-white/[0.05] rounded text-gray-600 hover:text-gray-400 transition-colors cursor-pointer text-left flex items-center gap-1">
-            ⚙ 設定
-          </button>
-          {showSettings && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setShowSettings(false)} />
-              <div className="absolute bottom-full left-0 mb-1 w-full bg-gray-800 border border-gray-700 rounded-md shadow-lg py-1 z-50">
-                <button onClick={() => { onResetBench(); setShowSettings(false) }}
-                  className="w-full text-left px-3 py-1.5 text-[11px] text-gray-300 hover:bg-gray-700 cursor-pointer">
-                  プリセットタグを初期状態に戻す
-                </button>
-                <div className="border-t border-gray-700 my-0.5" />
-                <button onClick={() => {
-                  // Offer export before clear
-                  const doExport = window.confirm('全データを削除する前に、Export JSONでバックアップしますか？')
-                  if (doExport) onExportJson()
-                  // Then confirm deletion
-                  setTimeout(() => {
-                    if (window.confirm('全データを削除してリセットしますか？\nこの操作は取り消せません。')) {
-                      onClearAll()
-                    }
-                  }, doExport ? 500 : 0)
-                  setShowSettings(false)
-                }} className="w-full text-left px-3 py-1.5 text-[11px] text-red-400 hover:bg-gray-700 cursor-pointer">
-                  全データを削除してリセット
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        <button onClick={() => setSettingsModalOpen(true)}
+          className="w-full px-2 py-1.5 text-[11px] bg-transparent hover:bg-white/[0.05] rounded text-gray-400 hover:text-gray-200 transition-colors cursor-pointer text-left flex items-center gap-1.5">
+          <span>⚙</span> 設定
+        </button>
       </div>
 
       {contextMenu && (
@@ -265,6 +215,18 @@ export default function Sidebar({
           onClose={() => setContextMenu(null)} onExportMarkdown={onExportMarkdown} onDelete={onDelete} />
       )}
       {analysisModalOpen && <PromptAnalysisModal onClose={() => setAnalysisModalOpen(false)} />}
+      {settingsModalOpen && (
+        <SettingsModal
+          translationProvider={translationProvider}
+          onSetTranslationProvider={onSetTranslationProvider}
+          translatorActiveProvider={translatorActiveProvider}
+          PROVIDERS={PROVIDERS}
+          onResetBench={onResetBench}
+          onClearAll={onClearAll}
+          onExportJson={onExportJson}
+          onClose={() => setSettingsModalOpen(false)}
+        />
+      )}
     </div>
   )
 }

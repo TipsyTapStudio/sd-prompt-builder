@@ -417,12 +417,18 @@ export default function PromptSection({ section, value, onChange, type, benchVal
               </div>
               {/* Translation (Positive only) */}
               {translator?.error && type === 'positive' && (
-                <div className="mt-0.5 px-3 text-[10px] text-red-400/70 font-mono">
-                  翻訳エラー: {translator.error}
+                <div className="mt-0.5 px-3 text-[10px] text-gray-500 font-mono leading-relaxed">
+                  <span className="text-amber-400/70">{translator.error}</span>
+                  <span className="text-gray-600 ml-1">
+                    — サイドバー下部で翻訳エンジンを切り替えるか、OFFにしてください
+                  </span>
                 </div>
               )}
               {translatedText && (
                 <div className="mt-0.5 px-3 text-[10px] text-gray-400 font-mono leading-relaxed whitespace-pre-wrap">
+                  {translator?.activeProvider && (
+                    <span className="text-gray-600 mr-1">[{translator.activeProvider}]</span>
+                  )}
                   {translatedText}
                 </div>
               )}

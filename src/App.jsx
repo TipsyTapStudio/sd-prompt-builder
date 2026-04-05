@@ -303,6 +303,7 @@ export default function App() {
             onResetBench={handleResetBench} onClearAll={handleClearAll}
             translationProvider={translationProvider}
             onSetTranslationProvider={setTranslationProvider}
+            translatorActiveProvider={translator.activeProvider}
             PROVIDERS={PROVIDERS}
             onToggleSidebar={() => setSidebarOpen(false)}
           />
