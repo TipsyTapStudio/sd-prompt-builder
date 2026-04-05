@@ -254,9 +254,8 @@ export default function OutputPanel({
   onSectionsUpdate,
   onNegativeSectionsUpdate,
 }) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [activeTab, setActiveTab] = useState('positive')
-  const [isEditing, setIsEditing] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(true)
+  const [editingPanel, setEditingPanel] = useState(null) // 'positive' | 'negative' | null
   const [editText, setEditText] = useState('')
 
   const positivePreview = useMemo(
@@ -277,25 +276,23 @@ export default function OutputPanel({
     [negativeSections]
   )
 
-  const currentPreview = activeTab === 'positive' ? positivePreview : negativePreview
-  const currentCopyText = activeTab === 'positive' ? positiveCopyText : negativeCopyText
-
   const collapsedPreview = useMemo(() => {
     const text = positiveCopyText
     if (!text) return ''
     return text.length > 50 ? text.slice(0, 50) + '...' : text
   }, [positiveCopyText])
 
-  const handleStartEdit = useCallback(() => {
-    setEditText(currentPreview)
-    setIsEditing(true)
-  }, [currentPreview])
+  const handleStartEdit = useCallback((panel) => {
+    const preview = panel === 'positive' ? positivePreview : negativePreview
+    setEditText(preview)
+    setEditingPanel(panel)
+  }, [positivePreview, negativePreview])
 
   const handleFinishEdit = useCallback(() => {
-    const sectionDefs = activeTab === 'positive' ? sectionsData.positive : sectionsData.negative
+    const sectionDefs = editingPanel === 'positive' ? sectionsData.positive : sectionsData.negative
     const parsed = parsePreviewText(editText, sectionDefs)
 
-    if (activeTab === 'positive') {
+    if (editingPanel === 'positive') {
       const updated = {}
       for (const s of sectionsData.positive) {
         updated[s.key] = parsed[s.key] !== undefined ? parsed[s.key] : ''
@@ -309,11 +306,11 @@ export default function OutputPanel({
       onNegativeSectionsUpdate(updated)
     }
 
-    setIsEditing(false)
-  }, [editText, activeTab, onSectionsUpdate, onNegativeSectionsUpdate])
+    setEditingPanel(null)
+  }, [editText, editingPanel, onSectionsUpdate, onNegativeSectionsUpdate])
 
   const handleCancelEdit = useCallback(() => {
-    setIsEditing(false)
+    setEditingPanel(null)
   }, [])
 
   return (
@@ -360,72 +357,52 @@ export default function OutputPanel({
         </div>
       </div>
 
-      {/* Expanded content */}
+      {/* Expanded content — Positive and Negative stacked */}
       {isExpanded && (
         <div className="pb-3 max-h-[60vh] overflow-y-auto">
-          {/* Tab bar */}
-          <div className="flex items-center gap-4 mb-2">
-            <button
-              onClick={() => { setActiveTab('positive'); setIsEditing(false) }}
-              className={`text-xs font-medium pb-1 border-b-2 transition-colors cursor-pointer ${
-                activeTab === 'positive'
-                  ? 'text-blue-400 border-blue-400'
-                  : 'text-gray-500 border-transparent hover:text-gray-400'
-              }`}
-            >
-              Positive
-            </button>
-            <button
-              onClick={() => { setActiveTab('negative'); setIsEditing(false) }}
-              className={`text-xs font-medium pb-1 border-b-2 transition-colors cursor-pointer ${
-                activeTab === 'negative'
-                  ? 'text-red-400 border-red-400'
-                  : 'text-gray-500 border-transparent hover:text-gray-400'
-              }`}
-            >
-              Negative
-            </button>
-          </div>
-
-          {/* Preview area */}
-          <div className="relative bg-gray-900 border border-gray-700 rounded-lg overflow-hidden">
-            <CornerCopyButton text={includeHeaders ? (activeTab === 'positive' ? positivePrompt : negativePrompt) : currentCopyText} />
-
-            {isEditing ? (
-              <div>
-                <textarea
-                  value={editText}
-                  onChange={(e) => setEditText(e.target.value)}
-                  className="w-full bg-gray-900 text-xs text-gray-200 font-mono p-3 pr-10 resize-none focus:outline-none leading-relaxed min-h-[120px]"
-                  style={{ height: `${Math.max(120, editText.split('\n').length * 18 + 24)}px` }}
-                />
-                <div className="flex items-center gap-2 px-3 pb-2">
-                  <button
-                    onClick={handleFinishEdit}
-                    className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors cursor-pointer"
-                  >
-                    apply
-                  </button>
-                  <button
-                    onClick={handleCancelEdit}
-                    className="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors cursor-pointer"
-                  >
-                    cancel
-                  </button>
+          {/* Positive */}
+          <div className="mb-2">
+            <span className="text-[11px] font-medium text-blue-400">Positive</span>
+            <div className="relative bg-gray-900 border border-gray-700 rounded-lg overflow-hidden mt-1">
+              <CornerCopyButton text={includeHeaders ? positivePrompt : positiveCopyText} />
+              {editingPanel === 'positive' ? (
+                <div>
+                  <textarea value={editText} onChange={(e) => setEditText(e.target.value)}
+                    className="w-full bg-gray-900 text-xs text-gray-200 font-mono p-2 pr-10 resize-none focus:outline-none leading-relaxed min-h-[80px]"
+                    style={{ height: `${Math.max(80, editText.split('\n').length * 18 + 20)}px` }} />
+                  <div className="flex items-center gap-2 px-3 pb-2">
+                    <button onClick={handleFinishEdit} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors cursor-pointer">apply</button>
+                    <button onClick={handleCancelEdit} className="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors cursor-pointer">cancel</button>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div
-                className="p-3 pr-10 cursor-text min-h-[60px]"
-                onClick={handleStartEdit}
-              >
-                <StyledPreview
-                  text={currentPreview}
-                  showHeaders={includeHeaders}
-                  showComments={includeComments}
-                />
-              </div>
-            )}
+              ) : (
+                <div className="p-2 pr-10 cursor-text min-h-[40px]" onClick={() => handleStartEdit('positive')}>
+                  <StyledPreview text={positivePreview} showHeaders={includeHeaders} showComments={includeComments} />
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Negative */}
+          <div>
+            <span className="text-[11px] font-medium text-red-400">Negative</span>
+            <div className="relative bg-gray-900 border border-gray-700 rounded-lg overflow-hidden mt-1">
+              <CornerCopyButton text={includeHeaders ? negativePrompt : negativeCopyText} />
+              {editingPanel === 'negative' ? (
+                <div>
+                  <textarea value={editText} onChange={(e) => setEditText(e.target.value)}
+                    className="w-full bg-gray-900 text-xs text-gray-200 font-mono p-2 pr-10 resize-none focus:outline-none leading-relaxed min-h-[60px]"
+                    style={{ height: `${Math.max(60, editText.split('\n').length * 18 + 20)}px` }} />
+                  <div className="flex items-center gap-2 px-3 pb-2">
+                    <button onClick={handleFinishEdit} className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors cursor-pointer">apply</button>
+                    <button onClick={handleCancelEdit} className="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded transition-colors cursor-pointer">cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-2 pr-10 cursor-text min-h-[30px]" onClick={() => handleStartEdit('negative')}>
+                  <StyledPreview text={negativePreview} showHeaders={includeHeaders} showComments={includeComments} />
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
