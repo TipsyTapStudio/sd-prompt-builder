@@ -78,7 +78,7 @@ export default function HighlightOverlay({ text, textareaRef, benchTagsSet }) {
   return (
     <div
       ref={overlayRef}
-      className="absolute inset-0 pointer-events-none select-none overflow-hidden font-mono text-sm leading-relaxed px-3 py-2 pr-20 whitespace-pre-wrap break-words"
+      className="absolute inset-0 pointer-events-none select-none overflow-hidden font-mono text-sm leading-relaxed px-3 py-2 pr-3 whitespace-pre-wrap break-words"
       style={{
         borderWidth: '1px',
         borderColor: 'transparent',

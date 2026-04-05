@@ -456,7 +456,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                   ref={textareaRef}
                   value={value}
                   onChange={e => onChange(e.target.value)}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 pr-20 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors font-mono leading-relaxed"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 pr-3 text-sm text-gray-100 placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-colors font-mono leading-relaxed"
                   style={{
                     resize: 'vertical',
                     overflow: 'hidden',
