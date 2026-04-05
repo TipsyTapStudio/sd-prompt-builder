@@ -1,85 +1,62 @@
 import { useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 
-const ANALYSIS_TEMPLATE = `# Stable Diffusion プロンプト構造化分析
+const ANALYSIS_TEMPLATE = `# SD プロンプト構造化分析
 
-あなたはStable Diffusionのプロンプト分析の専門家です。
-以下のSDプロンプトを、指定されたセクション構造に正確に分解してください。
-
----
-
-## 分析対象プロンプト
-
-### Positive:
-\`\`\`
-（ここにPositiveプロンプトを貼り付けてください）
-\`\`\`
-
-### Negative:
-\`\`\`
-（ここにNegativeプロンプトを貼り付けてください）
-\`\`\`
-
----
+以下のプロンプトを指定セクションに分解し、JSON で出力してください。
 
 ## セクション定義
 
-### Positive セクション（この順序で分類）
+**Positive（この順序）:**
+- quality: 品質・技術指定（masterpiece, best quality, RAW photo 等）
+- style: 画風（anime, realistic, oil painting 等）
+- face_hair: 顔・髪・表情（1girl, brown hair, smile 等）
+- body: 体型・身体状態（slim waist, sweat 等）
+- outfit: 衣装・アクセサリー（bikini, necklace 等）
+- composition: 構図・ポーズ・手持ち物（low angle, sitting, holding cup 等）
+- effects: 漫画的演出（motion lines, heart 等）
+- BREAK（composition/effects と environment の間に自動挿入）
+- environment: 背景・天候・光源（beach, sunset, rim lighting 等）
+- lora: LoRA指定（<lora:xxx:0.8> 等）
 
-| # | セクションキー | セクション名 | 役割 | 必須/任意 |
-|---|---|---|---|---|
-| 1 | quality | Quality & Technical | 品質・技術的指定（masterpiece, best quality, RAW photo, detailed skin texture 等） | 必須 |
-| 2 | style | Style / Aesthetic | 画風・スタイル指定（anime, realistic, oil painting 等） | 任意 |
-| 3 | face_hair | Face & Hair | 顔・髪型・髪色・表情（1 girl, brown hair, smile 等） | 必須 |
-| 4 | body | Body | 体型・プロポーション・身体の状態（slim waist, sweat 等） | 必須 |
-| 5 | outfit | Outfit | 衣装・アクセサリー（bikini, necklace 等） | 必須 |
-| 6 | composition | Composition & Pose | 構図・アングル・ポーズ・手に持つもの（low angle, sitting, holding cup 等） | 必須 |
-| 7 | effects | Effects / Expression | 漫画的演出・エフェクト（motion lines, heart, spoken heart 等） | 任意 |
-| - | BREAK | --- | 被写体と環境の分離（Composition/Effects の後、Environment の前に挿入） | 必須 |
-| 8 | environment | Environment & Lighting | 背景・場所・天候・光源（beach, sunset, rim lighting 等） | 必須 |
-| 9 | lora | Lora | LoRA指定（<lora:xxx:0.8> 等） | 任意 |
-
-### Negative セクション
-
-| # | セクションキー | セクション名 | 役割 |
-|---|---|---|---|
-| N1 | general_quality | General Quality | 品質除外（worst quality, blurry, watermark 等） |
-| N2 | body_anatomy | Body & Anatomy | 破綻防止（bad hands, extra fingers 等） |
-| N3 | skin_realism | Skin & Realism | のっぺり防止（smooth skin, plastic skin, cgi 等） |
-| N4 | lighting | Lighting | ライティング除外（flat lighting 等） |
-| N5 | composition | Composition (situational) | 構図除外・状況依存（standing, sitting 等、ポーズに応じて除外するもの） |
-
----
+**Negative:**
+- general_quality: 品質除外（worst quality, blurry, watermark 等）
+- body_anatomy: 破綻防止（bad hands, extra fingers 等）
+- skin_realism: のっぺり防止（smooth skin, plastic skin 等）
+- lighting: ライティング除外（flat lighting 等）
+- composition: 構図除外・状況依存（ポーズに応じた除外）
 
 ## 分類ルール
 
-以下の基準でタグを各セクションに振り分けてください：
+- 身体の状態（汗, 赤面 等）→ body / face_hair（部位で判断）
+- 身につける物 → outfit
+- 手に持つ物・使う物 → composition
+- 周囲の物・背景要素 → environment
+- 漫画的演出 → effects
+- カメラアングル → composition
+- \`<lora:...>\` → lora
+- \`(tag:weight)\` \`{a|b|c}\` はそのまま保持
 
-1. **身体の状態**（汗、涙、赤面、濡れ肌）→ Body または Face & Hair（表現される場所に応じて）
-2. **身につけるもの**（服、アクセサリー）→ Outfit
-3. **手に持つもの・使うもの**（マグカップ、傘、スマホ）→ Composition & Pose（動作とセットで記述）
-4. **周囲にあるもの**（テーブルの花瓶、背景の看板）→ Environment & Lighting
-5. **漫画的演出**（効果音、集中線、ハート）→ Effects / Expression
-6. **カメラアングル・フレーミング** → Composition & Pose
-7. **LoRA記法** \`<lora:name:weight>\` → Lora
+## 分析対象プロンプト
 
-**判断の原則**: 「それは身体に属するか、行動に属するか、環境に属するか」
+Positive:
+\`\`\`
+（ここに貼り付け）
+\`\`\`
 
-### ウェイト記法について
-- \`(tag:weight)\` はSDのウェイト指定。そのまま保持してください
-- \`{a|b|c}\` はDynamic Prompts記法。そのまま保持してください
+Negative:
+\`\`\`
+（ここに貼り付け）
+\`\`\`
 
----
+## 出力
 
-## 出力フォーマット
-
-以下のJSON形式で出力してください。空のセクションは空文字列 "" にしてください。
-タグ間のカンマとスペースはそのまま保持してください。
+以下の JSON で出力。空セクションは ""。タグの追加・削除・並び替えはしない。BREAK は JSON に含めない。
 
 \`\`\`json
 {
-  "title": "（プロンプトの内容を簡潔に表すタイトルを付けてください）",
-  "description": "（プロンプトの特徴を1行で説明してください）",
+  "title": "（簡潔なタイトル）",
+  "description": "（1行説明）",
   "sections": {
     "quality": "",
     "style": "",
@@ -99,14 +76,7 @@ const ANALYSIS_TEMPLATE = `# Stable Diffusion プロンプト構造化分析
     "composition": ""
   }
 }
-\`\`\`
-
-## 注意事項
-- 元のプロンプトに存在するタグを勝手に追加・削除しないでください
-- ウェイト指定 \`(tag:1.3)\` はそのまま保持してください
-- BREAK は出力JSONには含めません（アプリが自動挿入します）
-- 1つのタグが複数セクションに該当しそうな場合、最も関連の強いセクションに配置してください
-- 各セクション内のタグ順序は、元のプロンプトでの出現順を維持してください`
+\`\`\``
 
 function CloseIcon({ size = 16 }) {
   return (
