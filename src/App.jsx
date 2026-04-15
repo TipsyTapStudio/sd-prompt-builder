@@ -29,7 +29,7 @@ export default function App() {
   const [currentId, setCurrentId] = useState(null)
 
   const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
-  const { prompts, savePrompt, loadPrompt, deletePrompt } = useStorage()
+  const { prompts, savePrompt, deletePrompt } = useStorage()
 
   const updateSection = useCallback((key, value) => {
     setSections(prev => ({ ...prev, [key]: value }))
