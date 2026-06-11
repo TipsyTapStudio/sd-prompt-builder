@@ -86,3 +86,53 @@
 
 ### 次回セッションでやること
 → CLAUDE.md の「次回やるべきこと」セクションを参照
+
+## 2026-06-11 Session: 生成結果ギャラリー
+
+### 経緯
+「このプロンプトでどんな画像が生成されたか」を記録したいという要望から。
+生成環境は Colab → Google Drive 保存。Drive for Desktop を導入し、G:\ 仮想ドライブ
+経由でローカルからアクセスできる構成にした（ストリーミングモード、フォルダ同期は全オフ）。
+
+### 設計判断
+- **ハイブリッド保存方式**: サムネイル（長辺512px WebP）+ 抽出パラメータのみ
+  IndexedDB に保存。原寸画像は Drive 管理に任せる（容量・eviction 回避）
+- A1111/Forge が PNG の `tEXt` チャンク（keyword: parameters）に埋め込む
+  生成パラメータを純 JS でパース。JPEG の EXIF UserComment にも対応
+- UX レビュー → 実装 → テスターサブエージェント検証（12項目）のフロー
+
+### 実装した機能
+- エディタ下部（Negative 後・プレビュー前）の折りたたみ式「生成結果」セクション
+  - 横スクロールサムネイルストリップ + 枚数バッジ + 空状態ドロップゾーン
+- ファイルドラッグ中のみ出現する全画面ドロップオーバーレイ
+  - `Files` 型のみ反応（内部 DnD の `text/x-ppb-scene` 等と分離）
+  - 紐付け先プロンプトのタイトルを大書き、空プロンプト時は警告
+  - 未保存プロンプトへのドロップは flushAutoSave で ID 確定後に登録
+- 詳細モーダル: 画像拡大 / Positive・Negative 全文コピー / Seed 単独コピー /
+  Steps・Sampler 等のグリッド / その他パラメータ折りたたみ / 削除
+- センシティブぼかし: 画像内プロンプトとキーワードの部分一致判定
+  （`textContainsSensitive` 新設）、2段階クリック（解除→モーダル）、
+  設定に 3 択（キーワード一致のみ / 常に / なし）
+- プロンプト削除時の画像連動削除、全データ削除時の DB 削除
+- パーサー単体テスト: `scripts/test-image-metadata.mjs`（Node で実行）
+
+### 新ファイル
+- `src/utils/imageMetadata.js` — PNG/JPEG パラメータ抽出
+- `src/utils/imageDb.js` — IndexedDB ラッパー + サムネイル生成
+- `src/hooks/useImageGallery.js` — ギャラリー状態管理
+- `src/components/GalleryPanel.jsx` / `ImageDetailModal.jsx` / `DropOverlay.jsx`
+
+### 学び
+- OutputPanel が `sticky bottom-0 z-40` なので、ギャラリーは必ずその DOM 上流に
+  置く必要がある（下に置くと隠れる）
+- 既存 `matchesSensitive()` は完全一致（ベンチのメタラベル用）。生プロンプト判定
+  には部分一致版が別途必要だった
+- Node の Buffer はプール共有のため `buffer.slice(0)` ではなく
+  `buffer.slice(byteOffset, byteOffset + length)` でないと ArrayBuffer が壊れる
+
+### v2 候補（UX レビューで明示的にスコープ外としたもの）
+- SceneCard への代表画像サムネイル表示（最優先フォローアップ）
+- 「画像のプロンプトを取り込む」ボタン（PromptAnalysisModal 連携）
+- 画像内プロンプト vs 現在プロンプトの差分表示
+- ストーリーボードのシーンカードへの直接ドロップ
+- 同一ファイルの重複登録デデュープ（テスターからの指摘）

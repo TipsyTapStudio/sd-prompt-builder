@@ -53,6 +53,7 @@ export default function SettingsModal({
   translationProvider, onSetTranslationProvider, translatorActiveProvider, PROVIDERS,
   onResetBench, onClearAll, onExportJson, onClose,
   sensitiveKeywords = [], onUpdateSensitiveKeywords,
+  galleryBlurMode = 'keyword', onSetGalleryBlurMode,
   bench = {}, onUpdateBench,
 }) {
   const [confirmClear, setConfirmClear] = useState(false)
@@ -256,6 +257,7 @@ export default function SettingsModal({
                 <h3 className="text-sm font-medium text-gray-200 mb-1">センシティブ判定ラベル</h3>
                 <p className="text-xs text-gray-500 mb-3">
                   ベンチで <code className="text-pink-400">#</code> グループ名や <code className="text-pink-400">//</code> サブラベルがここに登録された語と一致したとき、配下のタグをピンクで表示します（カンマ区切り、大文字小文字無視）。
+                  生成結果ギャラリーのぼかし判定（画像内プロンプトとの部分一致）にも使われます。
                 </p>
                 <textarea
                   value={sensitiveDraft}
@@ -270,6 +272,32 @@ export default function SettingsModal({
                     className="px-3 py-1 text-xs bg-gray-800 hover:bg-gray-700 rounded text-gray-400 transition-colors cursor-pointer">
                     既定値に戻す
                   </button>
+                </div>
+              </div>
+
+              {/* Gallery blur */}
+              <div>
+                <h3 className="text-sm font-medium text-gray-200 mb-1">生成結果ギャラリーのぼかし</h3>
+                <p className="text-xs text-gray-500 mb-3">
+                  サムネイルのぼかし表示。クリックで一時的に解除できます（リロードで元に戻ります）。
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    ['keyword', 'キーワード一致のみ', '判定ラベルに一致した画像をぼかす'],
+                    ['all', '常にすべてぼかす', '全サムネイルをぼかす'],
+                    ['off', 'ぼかさない', 'すべてそのまま表示'],
+                  ].map(([mode, label, desc]) => (
+                    <button key={mode}
+                      onClick={() => onSetGalleryBlurMode?.(mode)}
+                      className={`px-2 py-2 rounded-lg text-left transition-colors cursor-pointer ${
+                        galleryBlurMode === mode
+                          ? 'bg-pink-600/20 text-pink-200 ring-1 ring-pink-500'
+                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                      }`}>
+                      <div className="text-xs font-medium">{label}</div>
+                      <div className="text-[9px] mt-0.5 opacity-70">{desc}</div>
+                    </button>
+                  ))}
                 </div>
               </div>
 

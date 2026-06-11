@@ -9,11 +9,18 @@ import PromptAnalysisModal from './components/PromptAnalysisModal'
 import SettingsModal from './components/SettingsModal'
 import StoryboardView from './components/StoryboardView'
 import ConsistencyCheckModal from './components/ConsistencyCheckModal'
+import GalleryPanel from './components/GalleryPanel'
+import DropOverlay from './components/DropOverlay'
 import { usePromptBuilder } from './hooks/usePromptBuilder'
 import { useStorage, saveDraft, loadDraft, clearDraft } from './hooks/useStorage'
 import { useFolders } from './hooks/useFolders'
+import { useImageGallery } from './hooks/useImageGallery'
 import { useTranslator, PROVIDERS } from './hooks/useTranslator'
-import { getSensitiveKeywords, setSensitiveKeywords } from './utils/sensitive'
+import {
+  getSensitiveKeywords, setSensitiveKeywords,
+  getGalleryBlurMode, setGalleryBlurMode,
+} from './utils/sensitive'
+import { deleteImagesForPrompt, deleteImageDatabase } from './utils/imageDb'
 
 const SIDEBAR_WIDTH = 260
 
@@ -140,6 +147,7 @@ export default function App() {
   const autoSaveTimerRef = useRef(null)
   const autoSaveDataRef = useRef(null)
   const [sensitiveKeywords, setSensitiveKeywordsState] = useState(getSensitiveKeywords)
+  const [galleryBlurMode, setGalleryBlurModeState] = useState(getGalleryBlurMode)
 
   const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
   const translator = useTranslator(translationProvider)
@@ -157,6 +165,7 @@ export default function App() {
     isCollapsed, toggleFolder, expandFolder,
     replaceFolders,
   } = useFolders()
+  const gallery = useImageGallery(currentId)
 
   // Keep autoSaveDataRef in sync with latest state (for flush callback)
   autoSaveDataRef.current = { title, description, sections, negativeSections, currentId, pendingFolderId, bench }
@@ -187,6 +196,7 @@ export default function App() {
     }))
     setSaveFlash(true)
     setTimeout(() => setSaveFlash(false), 1500)
+    return savedId
   }, [savePrompt, moveScene])
 
   const cancelAutoSave = useCallback(() => {
@@ -200,6 +210,28 @@ export default function App() {
     const hasContent = d.title.trim() || sectionsData.positive.some(s => (d.sections[s.key] || '').trim())
     if (hasContent) performSave(d)
   }, [cancelAutoSave, performSave])
+
+  // --- Gallery: register dropped/selected images to the current prompt ---
+  const hasEditorContent = title.trim() !== '' || sectionsData.positive.some(s => (sections[s.key] || '').trim())
+
+  const { addFiles: galleryAddFiles } = gallery
+  const handleGalleryFiles = useCallback((files) => {
+    let pid = autoSaveDataRef.current?.currentId
+    if (!pid) {
+      // Unsaved prompt: flush an auto-save first so the images have an id to attach to
+      const d = autoSaveDataRef.current
+      const hasContent = d && (d.title.trim() || sectionsData.positive.some(s => (d.sections[s.key] || '').trim()))
+      if (!hasContent) return
+      cancelAutoSave()
+      pid = performSave(d)
+    }
+    galleryAddFiles(files, pid)
+  }, [cancelAutoSave, performSave, galleryAddFiles])
+
+  const handleSetGalleryBlurMode = useCallback((mode) => {
+    setGalleryBlurMode(mode)
+    setGalleryBlurModeState(getGalleryBlurMode())
+  }, [])
 
   // --- Auto-save (debounce 2s) ---
   useEffect(() => {
@@ -345,12 +377,14 @@ export default function App() {
     if (!window.confirm(`「${title}」を削除しますか？`)) return
     cancelAutoSave()
     removeSceneFromFolders(currentId)
+    deleteImagesForPrompt(currentId).catch(() => {})
     deletePrompt(currentId)
     handleNew()
   }
 
   const handleDeletePrompt = useCallback((id) => {
     removeSceneFromFolders(id)
+    deleteImagesForPrompt(id).catch(() => {})
     deletePrompt(id)
   }, [deletePrompt, removeSceneFromFolders])
 
@@ -565,7 +599,7 @@ export default function App() {
     loadBench({})
   }
 
-  const handleClearAll = () => {
+  const handleClearAll = async () => {
     localStorage.removeItem('sd-prompt-builder:prompts')
     localStorage.removeItem('sd-prompt-builder:bench')
     localStorage.removeItem('sd-prompt-builder:settings')
@@ -575,6 +609,9 @@ export default function App() {
     localStorage.removeItem('sd-prompt-builder:tag-translations')
     localStorage.removeItem('sd-prompt-builder:sensitive-keywords')
     localStorage.removeItem('sd-prompt-builder:bench-collapsed')
+    localStorage.removeItem('sd-prompt-builder:gallery-collapsed')
+    localStorage.removeItem('sd-prompt-builder:gallery-blur')
+    try { await deleteImageDatabase() } catch { /* proceed with reload */ }
     window.location.reload()
   }
 
@@ -784,6 +821,17 @@ export default function App() {
                 onOpenGlobalBench={() => setSettingsOpen(true)} />
             )
           })}
+
+          {/* 生成結果ギャラリー — OutputPanel (sticky bottom) より DOM 上流に置くこと */}
+          <GalleryPanel
+            images={gallery.images}
+            busy={gallery.busy}
+            onAddFiles={handleGalleryFiles}
+            onRemoveImage={gallery.removeImage}
+            sensitiveKeywords={sensitiveKeywords}
+            blurMode={galleryBlurMode}
+            hasPrompt={!!currentId || hasEditorContent}
+          />
         </div>
 
         <div className="max-w-5xl mx-auto px-4">
@@ -796,6 +844,14 @@ export default function App() {
         </div>
       </div>
       )}
+
+      {/* Full-screen drop target while dragging files (editor view only) */}
+      <DropOverlay
+        enabled={viewMode === 'editor'}
+        title={displayTitle}
+        canRegister={!!currentId || hasEditorContent}
+        onDropFiles={handleGalleryFiles}
+      />
 
       {/* Prompt analysis / load modal */}
       {analysisOpen && (
@@ -832,6 +888,8 @@ export default function App() {
           onExportJson={exportToJson}
           sensitiveKeywords={sensitiveKeywords}
           onUpdateSensitiveKeywords={handleUpdateSensitiveKeywords}
+          galleryBlurMode={galleryBlurMode}
+          onSetGalleryBlurMode={handleSetGalleryBlurMode}
           bench={bench}
           onUpdateBench={updateBench}
           onClose={() => setSettingsOpen(false)}
