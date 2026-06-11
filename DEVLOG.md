@@ -115,6 +115,10 @@
   設定に 3 択（キーワード一致のみ / 常に / なし）
 - プロンプト削除時の画像連動削除、全データ削除時の DB 削除
 - パーサー単体テスト: `scripts/test-image-metadata.mjs`（Node で実行）
+- サイドバー添付インジケーター: 画像が登録されたプロンプト行の最右端に
+  画像アイコンを常時表示（Gmail のクリップ方式）。枚数は title ツールチップ、
+  アイコンのみ・クリック無動作・ぼかし設定と無関係。`getImageCounts()` の
+  一括取得を gallery.images / prompts 変更時に再読込
 
 ### 新ファイル
 - `src/utils/imageMetadata.js` — PNG/JPEG パラメータ抽出

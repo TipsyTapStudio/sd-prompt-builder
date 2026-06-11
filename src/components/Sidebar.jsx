@@ -93,6 +93,7 @@ export default function Sidebar({
   bench,
   onUpdateBench,
   onOpenSettings,
+  imageCounts = {},
 }) {
   const fileInputRef = useRef(null)
   const [contextMenu, setContextMenu] = useState(null)
@@ -393,6 +394,7 @@ export default function Sidebar({
               isBeingDragged={dragState?.sceneId === prompt.id}
               dropPosition={sceneDropMap[prompt.id] || null}
               isRenaming={renaming?.type === 'scene' && renaming.id === prompt.id}
+              imageCount={imageCounts[prompt.id] || 0}
               onLoad={onLoad}
               onContextMenu={showSceneContextMenu}
               onDuplicate={onDuplicate}
@@ -475,6 +477,7 @@ export default function Sidebar({
                   renamingSceneId={renaming?.type === 'scene' ? renaming.id : null}
                   draggedSceneId={dragState?.sceneId}
                   sceneDropMap={sceneDropMap}
+                  imageCounts={imageCounts}
                   onToggle={onToggleFolder}
                   onCommitRename={commitFolderRename}
                   onCancelRename={() => setRenaming(null)}

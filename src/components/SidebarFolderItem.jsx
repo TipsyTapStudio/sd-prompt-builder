@@ -39,6 +39,7 @@ export default function SidebarFolderItem({
   renamingSceneId,
   draggedSceneId,
   sceneDropMap,                   // { [sceneId]: 'before'|'after' } for child drop indicators
+  imageCounts = {},               // { [sceneId]: count } gallery attachment indicator
   onToggle,
   onCommitRename,
   onCancelRename,
@@ -132,6 +133,7 @@ export default function SidebarFolderItem({
               isBeingDragged={draggedSceneId === scene.id}
               dropPosition={sceneDropMap?.[scene.id] || null}
               isRenaming={renamingSceneId === scene.id}
+              imageCount={imageCounts[scene.id] || 0}
               onLoad={onSceneLoad}
               onContextMenu={onSceneContextMenu}
               onDuplicate={onSceneDuplicate}

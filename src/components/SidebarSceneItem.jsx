@@ -19,6 +19,16 @@ function DuplicateIcon({ size = 12 }) {
   )
 }
 
+function HasImagesIcon({ size = 11 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="12" height="10" rx="1.5" />
+      <circle cx="5.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+      <path d="M13.5 10.5L10 7l-5.5 5.5" />
+    </svg>
+  )
+}
+
 export default function SidebarSceneItem({
   prompt,
   isCurrent,
@@ -26,6 +36,7 @@ export default function SidebarSceneItem({
   isBeingDragged = false,
   dropPosition = null, // 'before' | 'after' | null
   isRenaming = false,
+  imageCount = 0,
   onLoad,
   onContextMenu,
   onDuplicate,
@@ -98,6 +109,15 @@ export default function SidebarSceneItem({
             >
               <DotsIcon size={12} />
             </button>
+            {imageCount > 0 && (
+              <span
+                className={`flex-shrink-0 pl-1 ${isCurrent ? 'text-gray-500' : 'text-gray-600'}`}
+                title={`生成画像 ${imageCount}枚`}
+                aria-hidden="true"
+              >
+                <HasImagesIcon />
+              </span>
+            )}
           </>
         )}
       </div>

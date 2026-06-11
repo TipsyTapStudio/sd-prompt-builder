@@ -20,7 +20,7 @@ import {
   getSensitiveKeywords, setSensitiveKeywords,
   getGalleryBlurMode, setGalleryBlurMode,
 } from './utils/sensitive'
-import { deleteImagesForPrompt, deleteImageDatabase } from './utils/imageDb'
+import { deleteImagesForPrompt, deleteImageDatabase, getImageCounts } from './utils/imageDb'
 
 const SIDEBAR_WIDTH = 260
 
@@ -232,6 +232,18 @@ export default function App() {
     setGalleryBlurMode(mode)
     setGalleryBlurModeState(getGalleryBlurMode())
   }, [])
+
+  // --- Image counts per prompt (sidebar attachment indicator) ---
+  // Refreshed when the current gallery changes (add/remove) or prompts change
+  // (covers deletion of non-current prompts). Index key scan — cheap.
+  const [imageCounts, setImageCounts] = useState({})
+  useEffect(() => {
+    let cancelled = false
+    getImageCounts()
+      .then(counts => { if (!cancelled) setImageCounts(counts) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [gallery.images, prompts])
 
   // --- Auto-save (debounce 2s) ---
   useEffect(() => {
@@ -692,6 +704,7 @@ export default function App() {
             onOpenFolder={handleOpenFolder}
             onGenerateScene={handleGenerateSceneFromSidebar}
             onOpenSettings={() => setSettingsOpen(true)}
+            imageCounts={imageCounts}
           />
         </div>
       </div>
