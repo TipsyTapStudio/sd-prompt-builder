@@ -730,6 +730,8 @@ export default function App() {
           allFolders={folders}
           onSceneExpansionApply={handleSceneExpansionApply}
           onStoryDecomposeApply={handleStoryDecomposeApply}
+          sensitiveKeywords={sensitiveKeywords}
+          blurMode={galleryBlurMode}
         />
       ) : (
       <div className="flex-1 min-w-0 pb-16">

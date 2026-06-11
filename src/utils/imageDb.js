@@ -67,6 +67,45 @@ export async function getImagesForPrompt(promptId) {
   return records
 }
 
+/**
+ * For a set of prompt ids, fetch the single newest image record for each.
+ * One key-cursor pass over the promptId index (no thumbnails deserialized)
+ * finds the latest id per prompt — ids are Date.now()-prefixed, so the max id
+ * is the newest, matching getImagesForPrompt's createdAt-desc ordering — then
+ * only those representative records are read in full. Avoids a getAll() per
+ * scene (storyboard can hold many cards).
+ * Returns { [promptId]: record }; prompts with no image are absent.
+ */
+export async function getLatestImageForPrompts(ids) {
+  const want = new Set((ids || []).filter(Boolean))
+  if (want.size === 0) return {}
+  const db = await openDb()
+  // Pass 1: cheap key scan — pick the max primary key per wanted promptId.
+  const latestId = {}
+  await new Promise((resolve, reject) => {
+    const req = db.transaction(STORE).objectStore(STORE).index('promptId').openKeyCursor()
+    req.onsuccess = () => {
+      const cursor = req.result
+      if (!cursor) { resolve(); return }
+      const pid = cursor.key            // index key = promptId
+      if (want.has(pid)) {
+        const id = cursor.primaryKey    // record id
+        if (!latestId[pid] || id > latestId[pid]) latestId[pid] = id
+      }
+      cursor.continue()
+    }
+    req.onerror = () => reject(req.error)
+  })
+  // Pass 2: read only the chosen records (with their thumbnails) in one tx.
+  const store = db.transaction(STORE).objectStore(STORE)
+  const out = {}
+  await Promise.all(Object.entries(latestId).map(async ([pid, id]) => {
+    const rec = await requestToPromise(store.get(id))
+    if (rec) out[pid] = rec
+  }))
+  return out
+}
+
 export async function getImageCounts() {
   const db = await openDb()
   const counts = {}

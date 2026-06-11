@@ -129,13 +129,12 @@ tag1, tag2       → 通常タグ（チップ表示）
 - GalleryPanel は OutputPanel（sticky bottom-0 z-40）より DOM 上流に置く（下だと隠れる）
 - DropOverlay は `Files` ドラッグ型のみに反応させる（内部 DnD の `text/x-ppb-scene` / `text/plain` と分離）
 - センシティブ判定: ベンチのメタラベルは `matchesSensitive`（完全一致）、生プロンプト文字列は `textContainsSensitive`（部分一致）を使う
+- SceneCard は代表画像サムネイル（最新登録）を最上部に全幅表示。一括取得は `imageDb.js` の `getLatestImageForPrompts(ids)`（promptId index を keyCursor 1 パス走査）。ぼかし解除の `revealed` Set は StoryboardView 側に保持（カード再描画で消えないため）
+- `useMemo`/`useEffect` の依存に optional chaining（`image?.thumb`）を書くと React Compiler の `preserve-manual-memoization` に引っかかる。ローカル変数に引き出してから依存に渡す
 
 ## 次回やるべきこと
 
-**→ 次セッションの具体的な実装指示は `NEXT_SESSION.md` を参照（設計判断済み）**
-
 ### 優先度高
-- SceneCard / ストーリーボードへの代表画像サムネイル表示（ギャラリー v2 の最優先フォローアップ、NEXT_SESSION.md に詳細）
 - GitHub Pages デプロイ設定
 - セクション名の曖昧マッチ改善（分析取り込みで "Quality and Technical" vs "Quality & Technical" が一致しない問題）
 

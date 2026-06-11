@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import RenameInline from './RenameInline'
 
 function DotsIcon({ size = 14 }) {
@@ -7,6 +7,25 @@ function DotsIcon({ size = 14 }) {
       <circle cx="8" cy="3" r="1.5" />
       <circle cx="8" cy="8" r="1.5" />
       <circle cx="8" cy="13" r="1.5" />
+    </svg>
+  )
+}
+
+function EyeIcon({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+function ImageIcon({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="M21 15l-5-5L5 20" />
     </svg>
   )
 }
@@ -40,6 +59,9 @@ export default function SceneCard({
   isLast = false,
   isBeingDragged = false,
   dropPosition = null,      // 'before' | 'after' | null
+  image = null,             // representative image record (newest), or null
+  imageBlurred = false,     // blur the representative thumbnail
+  onRevealImage,            // (imageId) => void — 1-click reveal, no modal
   onOpen,
   onRenameTitle,            // (sceneId, newTitle) => void
   onUpdateDescription,      // (sceneId, newDesc) => void
@@ -55,6 +77,21 @@ export default function SceneCard({
   const [editingTitle, setEditingTitle] = useState(false)
   const [editingDesc, setEditingDesc] = useState(false)
   const [menuPos, setMenuPos] = useState(null)
+
+  // Thumbnail object URL (Blob → URL), revoked on change/unmount.
+  const thumb = image?.thumb || null
+  const thumbUrl = useMemo(
+    () => (thumb ? URL.createObjectURL(thumb) : null),
+    [thumb]
+  )
+  useEffect(() => () => { if (thumbUrl) URL.revokeObjectURL(thumbUrl) }, [thumbUrl])
+
+  // 1 click = reveal only (no detail modal on the card); never opens the scene.
+  const handleThumbClick = (e) => {
+    if (!imageBlurred || !image) return
+    e.stopPropagation()
+    onRevealImage?.(image.id)
+  }
 
   const description = prompt.description || ''
   const fallbackPreview = !description && prompt.sections?.face_hair
@@ -88,12 +125,45 @@ export default function SceneCard({
             : 'bg-gray-900/60 border-gray-800/60 hover:bg-gray-900/80 hover:border-gray-700'
         }`}
       >
-        {/* Top thin band: #index + 3-dot menu */}
-        <div className="px-3 pt-2 pb-1 flex items-center justify-between">
-          <span className="text-[10px] text-gray-600 font-medium tracking-wider">#{index + 1}</span>
+        {/* Image band: representative thumbnail (newest) or placeholder frame.
+            #index + 3-dot menu overlay on top of it (storyboard-panel feel). */}
+        <div className="relative h-32 rounded-t-lg overflow-hidden bg-gray-900 border-b border-gray-800/60">
+          {thumbUrl ? (
+            <img
+              src={thumbUrl}
+              alt=""
+              draggable={false}
+              onClick={handleThumbClick}
+              className={`w-full h-32 object-cover object-top select-none ${
+                imageBlurred ? 'blur-md scale-110 cursor-pointer' : 'cursor-default'
+              }`}
+            />
+          ) : (
+            <div className="w-full h-32 flex items-center justify-center bg-gray-900/40 text-gray-700"
+              title="代表画像なし">
+              <ImageIcon size={22} />
+            </div>
+          )}
+
+          {/* Blur reveal affordance — 1 click reveals (session-only, no modal) */}
+          {thumbUrl && imageBlurred && (
+            <div
+              onClick={handleThumbClick}
+              className="absolute inset-0 flex items-center justify-center text-gray-300 cursor-pointer"
+              title="クリックで表示">
+              <EyeIcon />
+            </div>
+          )}
+
+          {/* Top scrim so the index/menu stay legible over bright frames */}
+          <div className="absolute inset-x-0 top-0 h-9 bg-gradient-to-b from-black/55 to-transparent pointer-events-none" />
+
+          <span className="absolute top-1.5 left-2 z-10 text-[10px] font-medium tracking-wider text-gray-200">
+            #{index + 1}
+          </span>
           <button
             onClick={openMenu}
-            className="p-0.5 rounded text-gray-500 hover:text-gray-300 cursor-pointer"
+            className="absolute top-1 right-1 z-10 p-1 rounded text-gray-200 hover:text-white cursor-pointer"
             aria-label="メニュー"
           >
             <DotsIcon size={12} />
@@ -101,7 +171,7 @@ export default function SceneCard({
         </div>
 
         {/* Title (click to edit) */}
-        <div className="px-3 pb-1">
+        <div className="px-3 pt-2 pb-1">
           {editingTitle ? (
             <RenameInline
               initialValue={prompt.title || ''}

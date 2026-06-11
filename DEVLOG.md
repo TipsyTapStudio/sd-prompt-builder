@@ -140,3 +140,52 @@
 - 画像内プロンプト vs 現在プロンプトの差分表示
 - ストーリーボードのシーンカードへの直接ドロップ
 - 同一ファイルの重複登録デデュープ（テスターからの指摘）
+
+## 2026-06-12 Session: シーンカード代表画像サムネイル（ギャラリー v2）
+
+### 経緯
+ギャラリー v2 の最優先フォローアップ。ストーリーボードを「テキストカードの列」から
+本物の絵コンテにするため、各シーンカードに代表画像サムネイルを表示。
+設計判断は前セッションの `NEXT_SESSION.md` で確定済み。
+
+### 設計判断（UX レビュー確定事項）
+- **画像バンドはカード最上部に全幅配置**（絵コンテ＝画像が主役）。#index と
+  3点メニューは上部スクリム付きで画像にオーバーレイ
+- **アスペクト比は固定高 `h-32` + `object-cover object-top`**（顔が上寄りの
+  ポートレートを優先クロップ。フィルムストリップ的に高さを揃える）
+- **画像なしシーンはプレースホルダー枠**（カメラアイコン）を出して高さを統一。
+  横並びで高さがガタつく方が画像なし表示より気になる、との判断
+- 代表画像 = 最新登録（createdAt 降順の先頭）。手動ピン留めはスコープ外
+- ぼかしはカードにも適用（`textContainsSensitive` + blurMode、ギャラリーと同一
+  判定）。カードでは 1 クリック = 解除のみ（詳細モーダルは出さない）。
+  **`revealed` Set は StoryboardView 側に持つ**（カード再描画で解除が消えない）
+- 枚数バッジ（+3 等）はノイズになるため今回は出さない
+
+### 実装した機能
+- `SceneCard.jsx`: 画像バンド追加（サムネイル or プレースホルダー）、ぼかし +
+  EyeIcon オーバーレイ、objectURL を useMemo + cleanup effect で管理。
+  サムネイルクリックはシーンを開かない（既存のクリックモデル＝開くは「開く」/
+  メニューのみ、を非破壊）
+- `StoryboardView.jsx`: マウント / シーン構成変化時に代表画像を一括読込、
+  ぼかし判定・セッション内解除 Set を保持し各カードへ配布
+- `imageDb.js`: `getLatestImageForPrompts(ids)` 追加。promptId index を
+  keyCursor で 1 パス走査して最新 id だけ拾い、その代表レコードのみ本読込
+  （シーン数 × getAll を回避。id は Date.now() 前置なので最大 id ＝ 最新）
+- `App.jsx`: StoryboardView へ `sensitiveKeywords` / `blurMode` を配線
+
+### 検証（プレビュー + 合成データ）
+- IndexedDB へ canvas 製ダミーサムネイル（成人被写体プロンプト）を直接 put し検証 →
+  検証後に `__synthetic` レコードを全削除（実画像は不使用）
+- 確認: サムネイル描画 / 最新優先（OLD 灰ではなく NEW 緑が表示）/ NSFW のぼかし +
+  EyeIcon / 画像なしカードのプレースホルダー / 1 クリック解除（シーンは開かない）/
+  非ぼかしサムネクリックは no-op / 「開く」は正しいシーンをエディタで開く /
+  コンソールエラーなし / `npm run build` 成功 / 変更ファイル lint クリーン
+
+### 学び
+- React Compiler（`react-hooks/preserve-manual-memoization`）は `useMemo` の
+  依存に `[image?.thumb]` のような optional chaining を書くと推論依存（`image`）と
+  食い違いエラーになる。`const thumb = image?.thumb` をローカルに引き出してから
+  `[thumb]` を依存にすると一致する（GalleryPanel が `[image.thumb]` で通るのは
+  optional chaining が無いから）
+- Tailwind v4 の `scale-110` は `transform` ではなく独立した `scale` プロパティを
+  使う（computed `transform` は `none` のまま。ぼかしの `filter` で可視確認すべき）

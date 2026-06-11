@@ -1,7 +1,9 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, useEffect, useCallback } from 'react'
 import SceneCard from './SceneCard'
 import SceneExpansionModal from './SceneExpansionModal'
 import StoryDecomposeModal from './StoryDecomposeModal'
+import { getLatestImageForPrompts } from '../utils/imageDb'
+import { textContainsSensitive } from '../utils/sensitive'
 
 const DRAG_TYPE = 'text/x-ppb-scene'
 
@@ -40,7 +42,35 @@ export default function StoryboardView({
   allFolders = [],
   onSceneExpansionApply,
   onStoryDecomposeApply,
+  sensitiveKeywords = [],
+  blurMode = 'keyword',
 }) {
+  // Representative thumbnails (newest per scene). Editor & storyboard views are
+  // exclusive, so a one-shot load on mount / scene-set change is enough — no
+  // live sync needed (images are only added from the editor).
+  const [imageMap, setImageMap] = useState({})
+  const [revealed, setRevealed] = useState(() => new Set()) // session-only unblur
+  const sceneIdsKey = scenes.map(s => s.id).join(',')
+  useEffect(() => {
+    let cancelled = false
+    const ids = sceneIdsKey ? sceneIdsKey.split(',') : []
+    getLatestImageForPrompts(ids)
+      .then(map => { if (!cancelled) setImageMap(map) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [sceneIdsKey])
+
+  const isBlurred = useCallback((image) => {
+    if (!image || blurMode === 'off') return false
+    if (revealed.has(image.id)) return false
+    if (blurMode === 'all') return true
+    return textContainsSensitive(image.positive || image.params || '', sensitiveKeywords)
+  }, [blurMode, revealed, sensitiveKeywords])
+
+  const revealImage = useCallback((imageId) => {
+    setRevealed(prev => new Set(prev).add(imageId))
+  }, [])
+
   const [editingDescription, setEditingDescription] = useState(false)
   const [descDraft, setDescDraft] = useState(folder.description || '')
   const [folderRenaming, setFolderRenaming] = useState(false)
@@ -226,6 +256,9 @@ export default function StoryboardView({
                   isCurrent={currentSceneId === scene.id}
                   isBeingDragged={dragState?.sceneId === scene.id}
                   dropPosition={sceneDropMap[scene.id] || null}
+                  image={imageMap[scene.id] || null}
+                  imageBlurred={isBlurred(imageMap[scene.id])}
+                  onRevealImage={revealImage}
                   onOpen={onOpenScene}
                   onRenameTitle={onRenameScene}
                   onUpdateDescription={onUpdateSceneDescription}
