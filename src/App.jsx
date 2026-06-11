@@ -1,13 +1,19 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import sectionsData from './data/sections.json'
 import PromptSection from './components/PromptSection'
+import MarkdownExportModal from './components/MarkdownExportModal'
 import BreakDivider from './components/BreakDivider'
 import OutputPanel from './components/OutputPanel'
 import Sidebar, { SidebarIcon } from './components/Sidebar'
-import SaveConfirmModal from './components/SaveConfirmModal'
+import PromptAnalysisModal from './components/PromptAnalysisModal'
+import SettingsModal from './components/SettingsModal'
+import StoryboardView from './components/StoryboardView'
+import ConsistencyCheckModal from './components/ConsistencyCheckModal'
 import { usePromptBuilder } from './hooks/usePromptBuilder'
 import { useStorage, saveDraft, loadDraft, clearDraft } from './hooks/useStorage'
+import { useFolders } from './hooks/useFolders'
 import { useTranslator, PROVIDERS } from './hooks/useTranslator'
+import { getSensitiveKeywords, setSensitiveKeywords } from './utils/sensitive'
 
 const SIDEBAR_WIDTH = 260
 
@@ -27,7 +33,8 @@ const createEmptyNegativeSections = () => {
  * Title dropdown menu
  */
 function TitleMenu({ title, description, onTitleChange, onDescriptionChange,
-  onExportMarkdown, onDelete, onCopyAsNew, onRevert, canRevert, createdAt, lastSavedAt, onClose }) {
+  onExportMarkdown, onImportMarkdown, onDelete, onCopyAsNew, onRevert, canRevert, createdAt, lastSavedAt,
+  onCheckConsistency, onLoadPrompt, onGeneratePrevScene, onGenerateNextScene, onClose }) {
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
@@ -46,13 +53,34 @@ function TitleMenu({ title, description, onTitleChange, onDescriptionChange,
             rows={3} />
         </div>
         <div className="border-t border-gray-700 my-1" />
+        <button onClick={() => { onCheckConsistency(); onClose() }}
+          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer">
+          整合性チェック…
+        </button>
+        <button onClick={() => { onLoadPrompt(); onClose() }}
+          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer">
+          プロンプトを読み込む…
+        </button>
+        <button onClick={() => { onGeneratePrevScene(); onClose() }}
+          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer">
+          前シーンを生成…
+        </button>
+        <button onClick={() => { onGenerateNextScene(); onClose() }}
+          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer">
+          後シーンを生成…
+        </button>
+        <div className="border-t border-gray-700 my-1" />
         <button onClick={() => { onCopyAsNew(); onClose() }}
           className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer">
           コピーとして保存
         </button>
         <button onClick={() => { onExportMarkdown(); onClose() }}
           className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer">
-          Markdown保存
+          Markdown形式で Export…
+        </button>
+        <button onClick={() => { onImportMarkdown(); onClose() }}
+          className="w-full text-left px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 cursor-pointer">
+          Markdown形式で Import…
         </button>
         <div className="border-t border-gray-700 my-1" />
         <button onClick={() => { onRevert(); onClose() }}
@@ -99,7 +127,19 @@ export default function App() {
   const [translationProvider, setTranslationProvider] = useState(PROVIDERS.AUTO)
   const [lastSavedSnapshot, setLastSavedSnapshot] = useState(null) // snapshot of last saved state
   const [saveFlash, setSaveFlash] = useState(false)
-  const [showSaveModal, setShowSaveModal] = useState(false)
+  const [viewMode, setViewMode] = useState('editor') // 'editor' | 'storyboard'
+  const [activeFolderId, setActiveFolderId] = useState(null)
+  const [pendingFolderId, setPendingFolderId] = useState(null)
+  const [consistencyOpen, setConsistencyOpen] = useState(false)
+  const [analysisOpen, setAnalysisOpen] = useState(false)
+  const [analysisModalTemplate, setAnalysisModalTemplate] = useState('analysis') // 'analysis'|'prev'|'next'
+  const [analysisInitialTab, setAnalysisInitialTab] = useState(null) // override initialTab when set
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [mdExportTarget, setMdExportTarget] = useState(null) // { id, title, description, sections, negative_sections, bench } | null
+  const [mdExportIncludeBench, setMdExportIncludeBench] = useState(false) // session-level remembered choice
+  const autoSaveTimerRef = useRef(null)
+  const autoSaveDataRef = useRef(null)
+  const [sensitiveKeywords, setSensitiveKeywordsState] = useState(getSensitiveKeywords)
 
   const { positivePrompt, negativePrompt } = usePromptBuilder(sections, negativeSections, includeHeaders)
   const translator = useTranslator(translationProvider)
@@ -109,8 +149,70 @@ export default function App() {
     bench, updateBench, loadBench,
     getFirstSamplePrompt,
   } = useStorage()
+  const {
+    folders,
+    createFolder, renameFolder, updateFolderDescription, deleteFolder,
+    moveScene, removeSceneFromFolders, insertSceneAfter,
+    findFolderForScene,
+    isCollapsed, toggleFolder, expandFolder,
+    replaceFolders,
+  } = useFolders()
 
-  // --- Draft auto-save (debounce 1.5s) ---
+  // Keep autoSaveDataRef in sync with latest state (for flush callback)
+  autoSaveDataRef.current = { title, description, sections, negativeSections, currentId, pendingFolderId, bench }
+
+  // --- Core save logic (used by auto-save and flush) ---
+  const performSave = useCallback((data) => {
+    const d = new Date()
+    const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+    const saveTitle = data.title.trim() || `${dateStr}_無題`
+    const saveData = {
+      id: data.currentId,
+      title: saveTitle,
+      description: data.description,
+      sections: data.sections,
+      negative_sections: data.negativeSections,
+    }
+    const savedId = savePrompt(saveData)
+    setCurrentId(savedId)
+    if (!data.title.trim()) setTitle(saveTitle)
+    if (data.pendingFolderId && !data.currentId) {
+      moveScene(savedId, data.pendingFolderId, null)
+      setPendingFolderId(null)
+    }
+    setLastSavedSnapshot(prev => ({
+      ...saveData, id: savedId, title: saveTitle,
+      created_at: prev?.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }))
+    setSaveFlash(true)
+    setTimeout(() => setSaveFlash(false), 1500)
+  }, [savePrompt, moveScene])
+
+  const cancelAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current) { clearTimeout(autoSaveTimerRef.current); autoSaveTimerRef.current = null }
+  }, [])
+
+  const flushAutoSave = useCallback(() => {
+    cancelAutoSave()
+    const d = autoSaveDataRef.current
+    if (!d) return
+    const hasContent = d.title.trim() || sectionsData.positive.some(s => (d.sections[s.key] || '').trim())
+    if (hasContent) performSave(d)
+  }, [cancelAutoSave, performSave])
+
+  // --- Auto-save (debounce 2s) ---
+  useEffect(() => {
+    const hasContent = title.trim() || sectionsData.positive.some(s => (sections[s.key] || '').trim())
+    if (!hasContent) return
+    cancelAutoSave()
+    autoSaveTimerRef.current = setTimeout(() => {
+      performSave(autoSaveDataRef.current)
+    }, 2000)
+    return cancelAutoSave
+  }, [title, description, sections, negativeSections, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- Draft (localStorage resilience layer, 1.5s) ---
   const draftTimerRef = useRef(null)
   useEffect(() => {
     if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
@@ -184,42 +286,7 @@ export default function App() {
     setNegativeSections(prev => ({ ...prev, [key]: value }))
   }, [])
 
-  const doSave = (asNew = false) => {
-    const saveId = asNew ? null : currentId
-    const saveTitle = asNew ? `${title || '無題'} のコピー` : title
-    const data = {
-      id: saveId,
-      title: saveTitle, description, sections,
-      negative_sections: negativeSections,
-    }
-    const id = savePrompt(data)
-    setCurrentId(id)
-    if (asNew) setTitle(saveTitle)
-    setLastSavedSnapshot({
-      ...data, id,
-      title: saveTitle, description, sections, negative_sections: negativeSections,
-      created_at: asNew ? new Date().toISOString() : (lastSavedSnapshot?.created_at || new Date().toISOString()),
-      updated_at: new Date().toISOString(),
-    })
-    setSaveFlash(true)
-    setTimeout(() => setSaveFlash(false), 2000)
-    setShowSaveModal(false)
-  }
-
-  const handleSave = () => {
-    if (!title.trim()) {
-      setTitleMenuOpen(true)
-      return
-    }
-    // New prompt: save directly. Existing prompt with changes: show modal.
-    if (isNewPrompt) {
-      doSave(false)
-    } else if (isDirty) {
-      setShowSaveModal(true)
-    }
-  }
-
-  const handleLoad = (prompt) => {
+  const loadPromptIntoEditor = (prompt) => {
     setTitle(prompt.title || '')
     setDescription(prompt.description || '')
     setSections({ ...createEmptySections(), ...prompt.sections })
@@ -227,78 +294,270 @@ export default function App() {
     setCurrentId(prompt.id)
     setLastSavedSnapshot(prompt)
     if (prompt.bench) loadBench(prompt.bench)
+    setPendingFolderId(null)
     clearDraft()
   }
 
+  const handleLoad = (prompt) => {
+    if (prompt.id === currentId && viewMode === 'editor') return
+    flushAutoSave()
+    loadPromptIntoEditor(prompt)
+    setViewMode('editor')
+  }
+
   const handleNew = () => {
+    flushAutoSave()
     setTitle('')
     setDescription('')
     setSections(createEmptySections())
     setNegativeSections(createEmptyNegativeSections())
     setCurrentId(null)
     setLastSavedSnapshot(null)
+    setPendingFolderId(null)
+    setViewMode('editor')
     clearDraft()
+  }
+
+  const handleNewInFolder = (folderId) => {
+    flushAutoSave()
+    setTitle('')
+    setDescription('')
+    setSections(createEmptySections())
+    setNegativeSections(createEmptyNegativeSections())
+    setCurrentId(null)
+    setLastSavedSnapshot(null)
+    setPendingFolderId(folderId)
+    setViewMode('editor')
+    clearDraft()
+  }
+
+  const handleOpenFolder = (folderId) => {
+    setActiveFolderId(folderId)
+    setViewMode('storyboard')
+  }
+
+  const handleBackToEditor = () => {
+    setViewMode('editor')
   }
 
   const handleDeleteCurrent = () => {
     if (!currentId) return
     if (!window.confirm(`「${title}」を削除しますか？`)) return
+    cancelAutoSave()
+    removeSceneFromFolders(currentId)
     deletePrompt(currentId)
     handleNew()
   }
 
+  const handleDeletePrompt = useCallback((id) => {
+    removeSceneFromFolders(id)
+    deletePrompt(id)
+  }, [deletePrompt, removeSceneFromFolders])
+
+  const handleRenamePrompt = useCallback((id, newTitle) => {
+    const target = prompts.find(p => p.id === id)
+    if (!target) return
+    savePrompt({ ...target, title: newTitle, bench: target.bench })
+    if (id === currentId) setTitle(newTitle)
+  }, [prompts, savePrompt, currentId])
+
+  const handleUpdatePromptDescription = useCallback((id, newDescription) => {
+    const target = prompts.find(p => p.id === id)
+    if (!target) return
+    savePrompt({ ...target, description: newDescription, bench: target.bench })
+    if (id === currentId) setDescription(newDescription)
+  }, [prompts, savePrompt, currentId])
+
+  const buildSceneFromParsed = useCallback((parsed) => {
+    const sectionsObj = createEmptySections()
+    Object.assign(sectionsObj, parsed.sections || {})
+    const negObj = createEmptyNegativeSections()
+    Object.assign(negObj, parsed.negativeSections || {})
+    return {
+      title: parsed.title || '',
+      description: parsed.description || '',
+      sections: sectionsObj,
+      negative_sections: negObj,
+    }
+  }, [])
+
+  const handleSceneExpansionApply = useCallback(({ anchorId, prev, next }) => {
+    const folder = folders.find(f => f.sceneIds.includes(anchorId))
+    if (!folder) return
+    const anchorIdx = folder.sceneIds.indexOf(anchorId)
+    let insertOffset = 0
+    if (prev) {
+      const data = buildSceneFromParsed(prev)
+      const newId = savePrompt({ id: null, ...data, bench: {} })
+      moveScene(newId, folder.id, anchorIdx)
+      insertOffset = 1
+    }
+    if (next) {
+      const data = buildSceneFromParsed(next)
+      const newId = savePrompt({ id: null, ...data, bench: {} })
+      moveScene(newId, folder.id, anchorIdx + insertOffset + 1)
+    }
+  }, [folders, buildSceneFromParsed, savePrompt, moveScene])
+
+  const handleStoryDecomposeApply = useCallback(({ folderName, scenes, targetFolderId, createNew }) => {
+    let folderId = targetFolderId
+    if (createNew) {
+      folderId = createFolder(folderName)
+    }
+    if (!folderId) return
+    for (const sceneParsed of scenes) {
+      const data = buildSceneFromParsed(sceneParsed)
+      const newId = savePrompt({ id: null, ...data, bench: {} })
+      moveScene(newId, folderId, null) // append
+    }
+    if (createNew) {
+      setActiveFolderId(folderId)
+      setViewMode('storyboard')
+    }
+  }, [createFolder, buildSceneFromParsed, savePrompt, moveScene])
+
   const handleCopyAsNew = () => {
+    flushAutoSave() // save original first
     const newTitle = `${title || '無題'} のコピー`
     setTitle(newTitle)
-    setCurrentId(null) // detach from original
+    setCurrentId(null)
     setLastSavedSnapshot(null)
-    // Next save will create a new prompt
+    // auto-save picks up the new state and creates a new entry
   }
 
-  // Duplicate a prompt from sidebar (open as new copy)
+  // Duplicate a prompt from sidebar — saves immediately and inserts after source if in folder
   const handleDuplicate = (prompt) => {
-    setTitle(`${prompt.title || '無題'} のコピー`)
+    const newTitle = `${prompt.title || '無題'} のコピー`
+    const newSections = { ...createEmptySections(), ...prompt.sections }
+    const newNeg = { ...createEmptyNegativeSections(), ...prompt.negative_sections }
+    const newBench = prompt.bench || bench
+    const newId = savePrompt({
+      id: null,
+      title: newTitle,
+      description: prompt.description || '',
+      sections: newSections,
+      negative_sections: newNeg,
+      bench: newBench,
+    })
+    const srcFolder = findFolderForScene(prompt.id)
+    if (srcFolder) insertSceneAfter(newId, prompt.id)
+    setTitle(newTitle)
     setDescription(prompt.description || '')
-    setSections({ ...createEmptySections(), ...prompt.sections })
-    setNegativeSections({ ...createEmptyNegativeSections(), ...prompt.negative_sections })
-    setCurrentId(null) // new prompt
-    setLastSavedSnapshot(null)
+    setSections(newSections)
+    setNegativeSections(newNeg)
+    setCurrentId(newId)
     if (prompt.bench) loadBench(prompt.bench)
+    const now = new Date().toISOString()
+    setLastSavedSnapshot({
+      id: newId,
+      title: newTitle,
+      description: prompt.description || '',
+      sections: newSections,
+      negative_sections: newNeg,
+      bench: newBench,
+      created_at: now,
+      updated_at: now,
+    })
     clearDraft()
   }
 
   const handleRevert = () => {
     if (!lastSavedSnapshot) return
     if (!window.confirm('最後に保存した状態に戻しますか？')) return
-    handleLoad(lastSavedSnapshot)
+    cancelAutoSave() // discard pending dirty state
+    loadPromptIntoEditor(lastSavedSnapshot)
   }
 
   const handleExportCurrentMd = () => {
-    exportToMarkdown({
+    setMdExportTarget({
       id: currentId, title, description,
       sections, negative_sections: negativeSections, bench,
     })
   }
 
-  const handleImportAnalysis = ({ sections: newSections, negativeSections: newNeg }) => {
-    // Merge parsed sections into current state (only non-empty values)
-    setSections(prev => {
-      const updated = { ...prev }
-      for (const key of Object.keys(newSections)) {
-        if (newSections[key]) updated[key] = newSections[key]
-      }
-      return updated
-    })
-    setNegativeSections(prev => {
-      const updated = { ...prev }
-      for (const key of Object.keys(newNeg)) {
-        if (newNeg[key]) updated[key] = newNeg[key]
-      }
-      return updated
-    })
-    setCurrentId(null) // treat as new prompt
-    setLastSavedSnapshot(null)
+  const handleImportMarkdown = () => {
+    setAnalysisInitialTab('file')
+    setAnalysisModalTemplate('analysis')
+    setAnalysisOpen(true)
   }
+
+  const handleExportFromSidebar = useCallback((prompt) => {
+    setMdExportTarget(prompt)
+  }, [])
+
+  const handleConfirmMdExport = useCallback(({ filename, includeBench }) => {
+    if (!mdExportTarget) return
+    setMdExportIncludeBench(includeBench)
+    exportToMarkdown(mdExportTarget, { filename, includeBench })
+    setMdExportTarget(null)
+  }, [mdExportTarget, exportToMarkdown])
+
+  const handleApplyConsistencyDiff = useCallback(({ sections: addPos, negativeSections: addNeg }) => {
+    setSections(prev => ({ ...prev, ...addPos }))
+    setNegativeSections(prev => ({ ...prev, ...addNeg }))
+  }, [])
+
+  const handleImportAnalysis = useCallback(({ sections: newSections, negativeSections: newNeg, title: parsedTitle, description: parsedDesc, bench: parsedBench }) => {
+    setSections({ ...createEmptySections(), ...newSections })
+    setNegativeSections({ ...createEmptyNegativeSections(), ...newNeg })
+    if (parsedTitle?.trim()) {
+      // For overwrite path keep the current title untouched if user already set one.
+      // Only auto-prefix with date when overwriting an empty-title scene.
+      if (!title?.trim()) {
+        const d = new Date()
+        const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+        setTitle(`${dateStr}_${parsedTitle.trim()}`)
+      } else {
+        setTitle(parsedTitle.trim())
+      }
+    }
+    if (parsedDesc !== undefined) setDescription(parsedDesc || '')
+    if (parsedBench) {
+      for (const [key, val] of Object.entries(parsedBench)) {
+        updateBench(key, val)
+      }
+    }
+  }, [title, updateBench])
+
+  const handleImportAnalysisAsNew = useCallback(({ sections: newSections, negativeSections: newNeg, title: parsedTitle, description: parsedDesc, bench: parsedBench }) => {
+    flushAutoSave()
+    const d = new Date()
+    const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+    const newTitle = parsedTitle?.trim() ? parsedTitle.trim() : `${dateStr}_new`
+    setTitle(newTitle)
+    setDescription(parsedDesc || '')
+    if (parsedBench) {
+      for (const [key, val] of Object.entries(parsedBench)) {
+        updateBench(key, val)
+      }
+    }
+    setSections({ ...createEmptySections(), ...newSections })
+    setNegativeSections({ ...createEmptyNegativeSections(), ...newNeg })
+    setCurrentId(null)
+    setLastSavedSnapshot(null)
+    setPendingFolderId(null)
+    setViewMode('editor')
+    clearDraft()
+  }, [flushAutoSave, clearDraft, updateBench])
+
+  const openAnalysisModal = useCallback((template) => {
+    setAnalysisModalTemplate(template)
+    setAnalysisInitialTab(null)
+    setAnalysisOpen(true)
+  }, [])
+
+  // Used by sidebar context menu — opens modal for any scene (loads it first if not current)
+  const [modalAnchorScene, setModalAnchorScene] = useState(null) // overrides currentScene for modal
+
+  const handleGenerateSceneFromSidebar = useCallback((sceneId, direction) => {
+    const prompt = prompts.find(p => p.id === sceneId)
+    if (!prompt) return
+    const sceneSections = { ...createEmptySections(), ...prompt.sections }
+    const sceneNeg = { ...createEmptyNegativeSections(), ...prompt.negative_sections }
+    setModalAnchorScene({ title: prompt.title || '', description: prompt.description || '', sections: sceneSections, negativeSections: sceneNeg })
+    setAnalysisModalTemplate(direction)
+    setAnalysisOpen(true)
+  }, [prompts])
 
   const handleResetBench = () => {
     if (!window.confirm('ベンチデータをプリセットの初期状態にリセットしますか？')) return
@@ -311,19 +570,57 @@ export default function App() {
     localStorage.removeItem('sd-prompt-builder:bench')
     localStorage.removeItem('sd-prompt-builder:settings')
     localStorage.removeItem('sd-prompt-builder:draft')
+    localStorage.removeItem('sd-prompt-builder:folders')
+    localStorage.removeItem('sd-prompt-builder:folder-state')
+    localStorage.removeItem('sd-prompt-builder:tag-translations')
+    localStorage.removeItem('sd-prompt-builder:sensitive-keywords')
+    localStorage.removeItem('sd-prompt-builder:bench-collapsed')
     window.location.reload()
   }
+
+  const handleUpdateSensitiveKeywords = useCallback((list) => {
+    setSensitiveKeywords(list)
+    setSensitiveKeywordsState(getSensitiveKeywords())
+  }, [])
+
+  const handleDeleteFolder = useCallback((id) => {
+    if (activeFolderId === id) {
+      setActiveFolderId(null)
+      setViewMode('editor')
+    }
+    deleteFolder(id)
+  }, [activeFolderId, deleteFolder])
+
+  const activeFolder = useMemo(
+    () => folders.find(f => f.id === activeFolderId) || null,
+    [folders, activeFolderId]
+  )
+
+  const activeFolderScenes = useMemo(() => {
+    if (!activeFolder) return []
+    const map = new Map(prompts.map(p => [p.id, p]))
+    return activeFolder.sceneIds.map(id => map.get(id)).filter(Boolean)
+  }, [activeFolder, prompts])
+
+  const handleImportJson = useCallback(async (file) => {
+    const result = await importFromJson(file)
+    if (Array.isArray(result.folders) && result.folders.length > 0) {
+      const existingIds = new Set(folders.map(f => f.id))
+      const merged = [
+        ...result.folders.filter(f => !existingIds.has(f.id)),
+        ...folders,
+      ]
+      replaceFolders(merged)
+      return { ...result, foldersImported: result.folders.filter(f => !existingIds.has(f.id)).length }
+    }
+    return { ...result, foldersImported: 0 }
+  }, [importFromJson, folders, replaceFolders])
 
   const displayTitle = title || '無題のプロンプト'
 
   // Save button label & style
-  const saveButtonLabel = saveFlash ? '✓ 保存済み' : isNewPrompt ? '保存する' : isDirty ? '変更を保存' : '✓ 保存済み'
-  const saveButtonActive = isNewPrompt || isDirty
-  const saveButtonClass = saveFlash
-    ? 'bg-green-600/80 text-white'
-    : saveButtonActive
-      ? 'bg-blue-600 hover:bg-blue-500 text-white'
-      : 'bg-transparent text-gray-500'
+  const saveStatusLabel = saveFlash ? '✓ 保存済み' : '自動保存'
+  const saveStatusClass = saveFlash ? 'text-green-400' : 'text-gray-600'
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 flex">
@@ -333,20 +630,58 @@ export default function App() {
         <div style={{ width: SIDEBAR_WIDTH }} className="h-full">
           <Sidebar
             prompts={prompts} currentId={currentId}
-            onLoad={handleLoad} onDuplicate={handleDuplicate} onNew={handleNew} onDelete={deletePrompt}
-            onExportJson={exportToJson} onExportMarkdown={exportToMarkdown} onImportJson={importFromJson}
+            onLoad={handleLoad} onDuplicate={handleDuplicate} onNew={handleNew} onDelete={handleDeletePrompt}
+            onExportJson={exportToJson} onExportMarkdown={handleExportFromSidebar} onImportJson={handleImportJson}
             onResetBench={handleResetBench} onClearAll={handleClearAll}
+            sensitiveKeywords={sensitiveKeywords}
+            onUpdateSensitiveKeywords={handleUpdateSensitiveKeywords}
             translationProvider={translationProvider}
             onSetTranslationProvider={setTranslationProvider}
             translatorActiveProvider={translator.activeProvider}
             PROVIDERS={PROVIDERS}
             onToggleSidebar={() => setSidebarOpen(false)}
-            onImportAnalysis={handleImportAnalysis}
+            bench={bench}
+            onUpdateBench={updateBench}
+            folders={folders}
+            onCreateFolder={createFolder}
+            onRenameFolder={renameFolder}
+            onDeleteFolder={handleDeleteFolder}
+            isFolderCollapsed={isCollapsed}
+            onToggleFolder={toggleFolder}
+            onExpandFolder={expandFolder}
+            onMoveScene={moveScene}
+            onRenamePrompt={handleRenamePrompt}
+            activeFolderId={viewMode === 'storyboard' ? activeFolderId : null}
+            onOpenFolder={handleOpenFolder}
+            onGenerateScene={handleGenerateSceneFromSidebar}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         </div>
       </div>
 
       {/* Main content */}
+      {viewMode === 'storyboard' && activeFolder ? (
+        <StoryboardView
+          folder={activeFolder}
+          scenes={activeFolderScenes}
+          currentSceneId={currentId}
+          onOpenScene={handleLoad}
+          onNewScene={handleNewInFolder}
+          onDuplicateScene={handleDuplicate}
+          onDeleteScene={handleDeletePrompt}
+          onMoveSceneOut={(sceneId) => moveScene(sceneId, null, null)}
+          onRenameScene={handleRenamePrompt}
+          onUpdateSceneDescription={handleUpdatePromptDescription}
+          onRenameFolder={renameFolder}
+          onDeleteFolder={handleDeleteFolder}
+          onUpdateFolderDescription={updateFolderDescription}
+          onMoveScene={moveScene}
+          onBackToEditor={handleBackToEditor}
+          allFolders={folders}
+          onSceneExpansionApply={handleSceneExpansionApply}
+          onStoryDecomposeApply={handleStoryDecomposeApply}
+        />
+      ) : (
       <div className="flex-1 min-w-0 pb-16">
         {/* Header */}
         <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
@@ -363,26 +698,38 @@ export default function App() {
                 <span className="text-[11px] text-gray-500 flex-shrink-0 mr-1">PPB for SDXL</span>
               )}
               {/* Title dropdown */}
-              <div className="relative min-w-0">
+              <div className="relative min-w-0 flex flex-col">
                 <button onClick={() => setTitleMenuOpen(!titleMenuOpen)}
-                  className="flex items-center gap-1 min-w-0 px-2 py-0.5 rounded hover:bg-gray-800 transition-colors cursor-pointer">
+                  className="flex items-center gap-1 min-w-0 px-2 py-0.5 rounded hover:bg-gray-800 transition-colors cursor-pointer text-left">
                   <span className={`text-sm truncate ${title ? 'text-gray-200' : 'text-gray-500'}`}>
                     {displayTitle}
                   </span>
                   {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" title="未保存の変更あり" />}
                   <span className="text-gray-500 text-xs flex-shrink-0">▼</span>
                 </button>
+                {description && (
+                  <button onClick={() => setTitleMenuOpen(!titleMenuOpen)}
+                    className="text-[11px] text-gray-500 hover:text-gray-400 truncate px-2 leading-tight text-left transition-colors cursor-pointer"
+                    title={description}>
+                    {description}
+                  </button>
+                )}
                 {titleMenuOpen && (
                   <TitleMenu
                     title={title} description={description}
                     onTitleChange={setTitle} onDescriptionChange={setDescription}
                     onExportMarkdown={handleExportCurrentMd}
+                    onImportMarkdown={handleImportMarkdown}
                     onDelete={handleDeleteCurrent}
                     onCopyAsNew={handleCopyAsNew}
                     onRevert={handleRevert}
                     canRevert={isDirty}
                     createdAt={lastSavedSnapshot?.created_at}
                     lastSavedAt={lastSavedSnapshot?.updated_at}
+                    onCheckConsistency={() => setConsistencyOpen(true)}
+                    onLoadPrompt={() => openAnalysisModal('analysis')}
+                    onGeneratePrevScene={() => openAnalysisModal('prev')}
+                    onGenerateNextScene={() => openAnalysisModal('next')}
                     onClose={() => setTitleMenuOpen(false)}
                   />
                 )}
@@ -404,12 +751,9 @@ export default function App() {
                   : `翻訳 ${translator.activeProvider || translationProvider}`
                 }
               </button>
-              <button onClick={saveButtonActive ? handleSave : undefined}
-                className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors ${saveButtonClass} ${
-                  saveButtonActive ? 'cursor-pointer' : 'cursor-default'
-                }`}>
-                {saveButtonLabel}
-              </button>
+              <span className={`px-2 text-xs transition-colors ${saveStatusClass}`}>
+                {saveStatusLabel}
+              </span>
             </div>
           </div>
         </div>
@@ -420,7 +764,9 @@ export default function App() {
             <div key={section.key}>
               <PromptSection section={section} value={sections[section.key] || ''}
                 onChange={(val) => updateSection(section.key, val)} type="positive"
-                benchValue={bench[section.key]} onBenchChange={updateBench} translator={translator} />
+                benchValue={bench[section.key]} onBenchChange={updateBench} translator={translator}
+                sensitiveKeywords={sensitiveKeywords}
+                onOpenGlobalBench={() => setSettingsOpen(true)} />
               {section.key === sectionsData.breakAfter && <BreakDivider />}
             </div>
           ))}
@@ -433,7 +779,9 @@ export default function App() {
                 value={negativeSections[section.key] || ''}
                 onChange={(val) => updateNegativeSection(section.key, val)} type="negative"
                 benchValue={bench[benchKey]}
-                onBenchChange={(_sectionKey, val) => { updateBench(benchKey, val) }} />
+                onBenchChange={(_sectionKey, val) => { updateBench(benchKey, val) }}
+                sensitiveKeywords={sensitiveKeywords}
+                onOpenGlobalBench={() => setSettingsOpen(true)} />
             )
           })}
         </div>
@@ -447,14 +795,58 @@ export default function App() {
             onSectionsUpdate={setSections} onNegativeSectionsUpdate={setNegativeSections} />
         </div>
       </div>
+      )}
 
-      {/* Save confirmation modal */}
-      {showSaveModal && (
-        <SaveConfirmModal
+      {/* Prompt analysis / load modal */}
+      {analysisOpen && (
+        <PromptAnalysisModal
+          onClose={() => { setAnalysisOpen(false); setModalAnchorScene(null); setAnalysisInitialTab(null) }}
+          onImport={handleImportAnalysis}
+          onImportAsNew={handleImportAnalysisAsNew}
+          hasContent={sectionsData.positive.some(s => (sections[s.key] || '').trim())}
+          initialTab={analysisInitialTab || (analysisModalTemplate === 'analysis' ? 'import' : 'template')}
+          initialTemplate={analysisModalTemplate}
+          currentScene={modalAnchorScene || { title, description, sections, negativeSections }}
+        />
+      )}
+
+      {/* Markdown export modal */}
+      {mdExportTarget && (
+        <MarkdownExportModal
+          prompt={mdExportTarget}
+          defaultIncludeBench={mdExportIncludeBench}
+          onExport={handleConfirmMdExport}
+          onClose={() => setMdExportTarget(null)}
+        />
+      )}
+
+      {/* Settings modal */}
+      {settingsOpen && (
+        <SettingsModal
+          translationProvider={translationProvider}
+          onSetTranslationProvider={setTranslationProvider}
+          translatorActiveProvider={translator.activeProvider}
+          PROVIDERS={PROVIDERS}
+          onResetBench={handleResetBench}
+          onClearAll={handleClearAll}
+          onExportJson={exportToJson}
+          sensitiveKeywords={sensitiveKeywords}
+          onUpdateSensitiveKeywords={handleUpdateSensitiveKeywords}
+          bench={bench}
+          onUpdateBench={updateBench}
+          onClose={() => setSettingsOpen(false)}
+        />
+      )}
+
+      {/* Consistency check modal */}
+      {consistencyOpen && (
+        <ConsistencyCheckModal
           title={title}
-          onOverwrite={() => doSave(false)}
-          onSaveAsNew={() => doSave(true)}
-          onCancel={() => setShowSaveModal(false)}
+          description={description}
+          sections={sections}
+          negativeSections={negativeSections}
+          onApplyDiff={handleApplyConsistencyDiff}
+          onClose={() => setConsistencyOpen(false)}
         />
       )}
     </div>

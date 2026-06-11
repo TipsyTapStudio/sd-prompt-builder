@@ -1,10 +1,23 @@
 import { useState, useCallback } from 'react'
 import samplePrompts from '../data/samplePrompts.js'
 import sectionsData from '../data/sections.json'
+import presetsData from '../data/presets.json'
+
+function presetDefaultFor(presetKey) {
+  const presets = presetsData[presetKey] || []
+  if (presets.length === 0) return ''
+  return presets.map(p => (p.tags || '').replace(/,\s*$/, '')).join(', ')
+}
+
+function benchKeyFor(section, isNegative) {
+  if (isNegative && section.key === 'composition') return 'neg_composition'
+  return section.key
+}
 
 const STORAGE_KEY = 'sd-prompt-builder:prompts'
 const BENCH_STORAGE_KEY = 'sd-prompt-builder:bench'
 const DRAFT_KEY = 'sd-prompt-builder:draft'
+const FOLDERS_KEY = 'sd-prompt-builder:folders'
 
 // --- Draft (auto-save) ---
 export function saveDraft(data) {
@@ -98,59 +111,63 @@ export function useStorage() {
   // --- CRUD ---
   const savePrompt = useCallback((data) => {
     const now = new Date().toISOString()
-    let updated
-
-    // Include bench data in saved prompt
-    const saveData = { ...data, bench: { ...bench } }
-
-    if (saveData.id) {
-      updated = prompts.map(p =>
-        p.id === saveData.id
-          ? { ...p, ...saveData, updated_at: now }
-          : p
-      )
-    } else {
-      const id = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
-      const newPrompt = {
-        ...saveData,
-        id,
-        created_at: now,
-        updated_at: now,
-      }
-      updated = [newPrompt, ...prompts]
-      saveData.id = id
-      data.id = id
+    const saveData = {
+      ...data,
+      bench: data.bench !== undefined ? data.bench : { ...bench },
     }
-
-    writeToStorage(updated)
-    setPrompts(updated)
-    return data.id
-  }, [prompts, bench])
+    let resultId = saveData.id
+    if (!resultId) {
+      resultId = `${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    }
+    setPrompts(prev => {
+      let updated
+      if (saveData.id) {
+        updated = prev.map(p =>
+          p.id === saveData.id ? { ...p, ...saveData, updated_at: now } : p
+        )
+      } else {
+        const newPrompt = { ...saveData, id: resultId, created_at: now, updated_at: now }
+        updated = [newPrompt, ...prev]
+      }
+      writeToStorage(updated)
+      return updated
+    })
+    return resultId
+  }, [bench])
 
   const loadPrompt = useCallback((id) => {
     return prompts.find(p => p.id === id) || null
   }, [prompts])
 
   const deletePrompt = useCallback((id) => {
-    const updated = prompts.filter(p => p.id !== id)
-    writeToStorage(updated)
-    setPrompts(updated)
-  }, [prompts])
+    setPrompts(prev => {
+      const updated = prev.filter(p => p.id !== id)
+      writeToStorage(updated)
+      return updated
+    })
+  }, [])
 
   // --- Export / Import ---
   const exportToJson = useCallback(() => {
+    let folders = []
+    try {
+      const raw = localStorage.getItem(FOLDERS_KEY)
+      if (raw) folders = JSON.parse(raw) || []
+    } catch { /* ignore */ }
     const payload = {
       app: 'sd-prompt-builder',
-      version: '1.0',
+      version: '1.1',
       exported_at: new Date().toISOString(),
       prompts: prompts,
+      folders: folders,
     }
     const json = JSON.stringify(payload, null, 2)
     const filename = `sd-prompts-${formatTimestamp()}.json`
     downloadFile(json, filename, 'application/json')
   }, [prompts])
 
-  const exportToMarkdown = useCallback((prompt) => {
+  const exportToMarkdown = useCallback((prompt, options = {}) => {
+    const { filename: customFilename, includeBench = true } = options
     const lines = []
 
     lines.push(`# ${prompt.title || 'Untitled'}`)
@@ -209,29 +226,37 @@ export function useStorage() {
       }
     }
 
-    // Bench data (at the bottom, after separator)
+    // Bench data (at the bottom, after separator).
+    // Use effective bench: user override (prompt.bench[key]) when defined, otherwise presets.json default.
     const benchData = prompt.bench || {}
-    const allSections = [...sectionsData.positive, ...sectionsData.negative]
-    const hasBenchContent = allSections.some(s => {
-      const key = s.key === 'composition' && sectionsData.negative.includes(s) ? 'neg_composition' : s.key
-      return (benchData[key] || '').trim()
-    })
+    const sectionEntries = [
+      ...sectionsData.positive.map(s => ({ section: s, isNegative: false })),
+      ...sectionsData.negative.map(s => ({ section: s, isNegative: true })),
+    ]
 
-    if (hasBenchContent) {
+    const resolveBench = (section, isNegative) => {
+      const key = benchKeyFor(section, isNegative)
+      const userValue = benchData[key]
+      if (userValue !== undefined) return (userValue || '').trim()
+      return presetDefaultFor(key).trim()
+    }
+
+    const hasBenchContent = sectionEntries.some(({ section, isNegative }) =>
+      resolveBench(section, isNegative).length > 0
+    )
+
+    if (hasBenchContent && includeBench) {
       lines.push('---')
       lines.push('')
       lines.push('## Bench')
       lines.push('')
 
-      for (const section of allSections) {
-        const key = sectionsData.negative.some(n => n.key === section.key && section === sectionsData.negative.find(n2 => n2.key === section.key))
-          ? (section.key === 'composition' ? 'neg_composition' : section.key)
-          : section.key
-        const benchText = (benchData[key] || '').trim()
+      for (const { section, isNegative } of sectionEntries) {
+        const benchText = resolveBench(section, isNegative)
         if (!benchText) continue
 
-        lines.push(`### ${section.name}`)
-        // Format bench text with labels on separate lines
+        const heading = isNegative ? `Negative - ${section.name}` : section.name
+        lines.push(`### ${heading}`)
         const parts = benchText.split(',').map(p => p.trim()).filter(Boolean)
         let currentTags = []
         for (const part of parts) {
@@ -240,7 +265,13 @@ export function useStorage() {
               lines.push(currentTags.join(', '))
               currentTags = []
             }
-            lines.push(part)
+            // Drop spacer sentinels (`//`, `//-`, `//---`) — render as blank line
+            const rest = part.replace(/^\/\/\s*/, '').trim()
+            if (part.startsWith('//') && (rest === '' || /^-+$/.test(rest))) {
+              lines.push('')
+            } else {
+              lines.push(part)
+            }
           } else {
             currentTags.push(part)
           }
@@ -253,7 +284,7 @@ export function useStorage() {
     }
 
     const md = lines.join('\n').trimEnd() + '\n'
-    const filename = `${prompt.title || 'untitled'}.md`
+    const filename = customFilename || `${prompt.title || 'untitled'}.md`
     downloadFile(md, filename, 'text/markdown')
   }, [])
 
@@ -305,7 +336,20 @@ export function useStorage() {
             setPrompts(updated)
           }
 
-          resolve({ imported, skipped })
+          // Parse folders if present (v1.1+). Caller merges via useFolders.
+          const parsedFolders = []
+          if (Array.isArray(data.folders) && data.folders.length > 0) {
+            const validIds = new Set([...prompts, ...newPrompts].map(p => p.id))
+            for (const f of data.folders) {
+              if (!f || !f.id || !f.name || !Array.isArray(f.sceneIds)) continue
+              parsedFolders.push({
+                ...f,
+                sceneIds: f.sceneIds.filter(id => validIds.has(id)),
+              })
+            }
+          }
+
+          resolve({ imported, skipped, folders: parsedFolders })
         } catch (err) {
           reject(err)
         }

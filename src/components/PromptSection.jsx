@@ -1,8 +1,23 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import presetsData from '../data/presets.json'
 import HighlightOverlay from './HighlightOverlay'
+import BenchChip from './BenchChip'
 import { parseComments, stripComments } from '../utils/commentParser'
+import { matchesSensitive } from '../utils/sensitive'
+import { parseBenchItems, benchTextToFormatted, formattedToBenchText } from '../utils/benchFormat'
 // Translation: manual per-section button
+
+const COLLAPSE_KEY = 'sd-prompt-builder:bench-collapsed'
+
+function readCollapsed() {
+  try { return JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '{}') }
+  catch { return {} }
+}
+
+function writeCollapsed(map) {
+  try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(map)) }
+  catch { /* ignore */ }
+}
 
 function estimateTokens(text) {
   if (!text || !text.trim()) return 0
@@ -22,31 +37,29 @@ function normalizeTag(tag) {
   return t.toLowerCase()
 }
 
-/**
- * Parse bench text into items: { type: 'tag' | 'comment', text: string }
- * Comments start with // and go to the next comma or end of text.
- * They are rendered as separators, not chips.
- */
-function parseBenchItems(text) {
-  if (!text || !text.trim()) return []
-  const items = []
-  const parts = text.split(',')
-  for (const part of parts) {
-    const trimmed = part.trim()
-    if (!trimmed) continue
-    if (trimmed.startsWith('#') && !trimmed.startsWith('##')) {
-      // Group header: "# HAIR" → label "HAIR"
-      const label = trimmed.replace(/^#\s*/, '').trim()
-      items.push({ type: 'comment', text: trimmed, label: label || trimmed, isGroup: true })
-    } else if (trimmed.startsWith('//')) {
-      // Sub-label: "// color" → label "color"
-      const label = trimmed.replace(/^\/\/\s*-*\s*/, '').replace(/\s*-*\s*$/, '').trim()
-      items.push({ type: 'comment', text: trimmed, label: label || trimmed, isGroup: false })
-    } else {
-      items.push({ type: 'tag', text: trimmed })
-    }
+
+function annotateSensitive(items, keywords) {
+  if (!keywords || keywords.length === 0) {
+    return items.map(it => ({ ...it, isSensitive: false }))
   }
-  return items
+  let groupSensitive = false
+  let subSensitive = false
+  return items.map(item => {
+    if (item.isGroup) {
+      groupSensitive = matchesSensitive([item.label], keywords)
+      subSensitive = false
+      return { ...item, isSensitive: groupSensitive }
+    }
+    if (item.type === 'spacer') {
+      subSensitive = false
+      return { ...item, isSensitive: groupSensitive }
+    }
+    if (item.type === 'comment' && !item.isGroup) {
+      subSensitive = matchesSensitive([item.label], keywords)
+      return { ...item, isSensitive: groupSensitive || subSensitive }
+    }
+    return { ...item, isSensitive: groupSensitive || subSensitive }
+  })
 }
 
 /** Rebuild bench text from items array */
@@ -54,51 +67,8 @@ function benchItemsToText(items) {
   return items.map(it => it.text).join(', ')
 }
 
-/** Convert flat comma-separated bench text to formatted multi-line for editing */
-function benchTextToFormatted(text) {
-  if (!text || !text.trim()) return ''
-  const items = parseBenchItems(text)
-  const lines = []
-  let currentTags = []
 
-  for (const item of items) {
-    if (item.type === 'comment') {
-      // Flush accumulated tags before the label
-      if (currentTags.length > 0) {
-        lines.push(currentTags.join(', '))
-        currentTags = []
-      }
-      lines.push(item.text)
-    } else {
-      currentTags.push(item.text)
-    }
-  }
-  // Flush remaining tags
-  if (currentTags.length > 0) {
-    lines.push(currentTags.join(', '))
-  }
-  return lines.join('\n')
-}
-
-/** Convert formatted multi-line text back to flat comma-separated */
-function formattedToBenchText(formatted) {
-  if (!formatted || !formatted.trim()) return ''
-  const parts = []
-  for (const line of formatted.split('\n')) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    if (trimmed.startsWith('#') || trimmed.startsWith('//')) {
-      parts.push(trimmed)
-    } else {
-      // Split tags by comma within the line
-      const tags = trimmed.split(',').map(t => t.trim()).filter(Boolean)
-      parts.push(...tags)
-    }
-  }
-  return parts.join(', ')
-}
-
-export default function PromptSection({ section, value, onChange, type, benchValue, onBenchChange, translator }) {
+export default function PromptSection({ section, value, onChange, type, benchValue, onBenchChange, translator, sensitiveKeywords = [], onOpenGlobalBench }) {
   const [isOpen, setIsOpen] = useState(section.defaultOpen)
   const [benchOpen, setBenchOpen] = useState(true)
   const [benchEditMode, setBenchEditMode] = useState(false)
@@ -106,6 +76,7 @@ export default function PromptSection({ section, value, onChange, type, benchVal
   const [selectedChips, setSelectedChips] = useState(new Set())
   const [dragIndex, setDragIndex] = useState(null)
   const [dividerWidth, setDividerWidth] = useState(62) // left pane percentage
+  const [collapsedMap, setCollapsedMap] = useState(readCollapsed)
   const textareaRef = useRef(null)
   const benchRef = useRef(null)
   const userMinHeight = useRef(0)
@@ -122,6 +93,19 @@ export default function PromptSection({ section, value, onChange, type, benchVal
   const defaultBenchContent = useMemo(() => {
     if (presets.length === 0) return ''
     return presets.map(p => p.tags.replace(/,\s*$/, '')).join(', ')
+  }, [presets])
+
+  // Set of tags shipped as system defaults (presets.json)
+  const systemDefaultSet = useMemo(() => {
+    const set = new Set()
+    for (const p of presets) {
+      for (const part of (p.tags || '').split(',')) {
+        const t = part.trim()
+        if (!t || t.startsWith('#') || t.startsWith('//')) continue
+        set.add(normalizeTag(t))
+      }
+    }
+    return set
   }, [presets])
 
   const effectiveBench = benchValue !== undefined ? benchValue : defaultBenchContent
@@ -269,9 +253,115 @@ export default function PromptSection({ section, value, onChange, type, benchVal
     insertTagAtCursor(tag)
   }, [selectedChips, effectiveBench, insertTagAtCursor])
 
-  // Bench items parsed with comments
-  const benchItems = useMemo(() => parseBenchItems(effectiveBench), [effectiveBench])
+  // Bench items parsed with comments and sensitive annotation
+  const benchItems = useMemo(
+    () => annotateSensitive(parseBenchItems(effectiveBench), sensitiveKeywords),
+    [effectiveBench, sensitiveKeywords]
+  )
   const hasBench = benchItems.length > 0 || benchEditMode
+
+  // Build group + bucket structure for rendering.
+  // A bucket = sublabel section (or default unlabelled section within a group).
+  const benchGroups = useMemo(() => {
+    const buildBuckets = (rawItems, groupSensitive) => {
+      const buckets = []
+      let current = { sublabel: null, sublabelIdx: null, isSensitive: groupSensitive, items: [], isSpacer: false }
+      for (const it of rawItems) {
+        if (it.type === 'comment' && !it.isGroup) {
+          if (current.sublabel !== null || current.items.length > 0 || current.isSpacer) buckets.push(current)
+          current = {
+            sublabel: it.label,
+            sublabelIdx: it.idx,
+            isSensitive: !!it.isSensitive || groupSensitive,
+            items: [],
+            isSpacer: false,
+          }
+        } else if (it.type === 'spacer') {
+          if (current.sublabel !== null || current.items.length > 0 || current.isSpacer) buckets.push(current)
+          current = {
+            sublabel: null,
+            sublabelIdx: it.idx,
+            isSensitive: groupSensitive,
+            items: [],
+            isSpacer: true,
+          }
+        } else {
+          current.items.push(it)
+        }
+      }
+      if (current.sublabel !== null || current.items.length > 0 || current.isSpacer) buckets.push(current)
+      return buckets
+    }
+
+    const groups = []
+    let current = { name: null, headerIdx: -1, isSensitive: false, items: [] }
+    for (let idx = 0; idx < benchItems.length; idx++) {
+      const item = benchItems[idx]
+      if (item.isGroup) {
+        if (current.headerIdx >= 0 || current.items.length > 0) groups.push(current)
+        current = {
+          name: item.label,
+          headerIdx: idx,
+          isSensitive: !!item.isSensitive,
+          items: [],
+        }
+      } else {
+        current.items.push({ ...item, idx })
+      }
+    }
+    if (current.headerIdx >= 0 || current.items.length > 0) groups.push(current)
+
+    // Now compute buckets per group
+    return groups.map(g => ({
+      ...g,
+      buckets: buildBuckets(g.items, g.isSensitive),
+    }))
+  }, [benchItems])
+
+  // Group-level fold (default: open, user can collapse)
+  const isGroupCollapsed = useCallback((groupName) => {
+    if (!groupName) return false
+    return collapsedMap[`${section.key}::${groupName}::__group__`] === 'collapsed'
+  }, [collapsedMap, section.key])
+
+  const toggleGroup = useCallback((groupName) => {
+    if (!groupName) return
+    const key = `${section.key}::${groupName}::__group__`
+    setCollapsedMap(prev => {
+      const next = { ...prev, [key]: prev[key] === 'collapsed' ? 'open' : 'collapsed' }
+      writeCollapsed(next)
+      return next
+    })
+  }, [section.key])
+
+  // Bucket-level expand (default: collapsed → only active chips shown)
+  const bucketKey = useCallback((groupName, sublabel, bIdx) => {
+    return `${section.key}::${groupName || '__'}::${sublabel ?? `__idx_${bIdx}`}`
+  }, [section.key])
+
+  const isBucketExpanded = useCallback((groupName, sublabel, bIdx) => {
+    return collapsedMap[bucketKey(groupName, sublabel, bIdx)] === 'open'
+  }, [collapsedMap, bucketKey])
+
+  const toggleBucket = useCallback((groupName, sublabel, bIdx) => {
+    const key = bucketKey(groupName, sublabel, bIdx)
+    setCollapsedMap(prev => {
+      const next = { ...prev, [key]: prev[key] === 'open' ? 'collapsed' : 'open' }
+      writeCollapsed(next)
+      return next
+    })
+  }, [bucketKey])
+
+  // Active tags for pin row
+  const pinRowItems = useMemo(() => {
+    return benchItems
+      .map((item, idx) => ({ ...item, idx }))
+      .filter(item => {
+        if (item.type !== 'tag') return false
+        const norm = normalizeTag(item.text)
+        return activeTags.fixed.has(norm) || activeTags.dp.has(norm)
+      })
+  }, [benchItems, activeTags])
 
   // Drag and drop reorder
   const handleDragStart = useCallback((e, index) => {
@@ -510,66 +600,127 @@ export default function PromptSection({ section, value, onChange, type, benchVal
             {benchOpen && hasBench && (
               <div className="flex-1 flex flex-col min-w-0">
                 {/* Chip area */}
-                <div className="bg-gray-800/70 border border-gray-700 rounded-lg p-1.5 min-h-[60px] max-h-[180px] overflow-y-auto">
-                  <div className="flex flex-wrap gap-0.5">
-                    {benchItems.map((item, i) => {
-                      if (item.type === 'comment') {
-                        if (item.isGroup) {
-                          // Group header: bold, slightly larger, with line
-                          return (
-                            <div key={`comment-${i}`} className="w-full flex items-center gap-1 pt-1.5 pb-0.5 px-1 select-none pointer-events-none first:pt-0">
-                              <span className="text-[11px] leading-none text-zinc-400 font-bold truncate">{item.label}</span>
-                              <span className="flex-1 h-px bg-zinc-700" />
-                            </div>
-                          )
-                        }
-                        return (
-                          <div key={`comment-${i}`} className="w-full flex items-center gap-1 py-0.5 px-1 select-none pointer-events-none">
-                            <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 flex-shrink-0" />
-                            <span className="text-[11px] leading-none text-zinc-500 truncate">{item.label}</span>
-                          </div>
-                        )
-                      }
+                <div className="bg-gray-800/70 border border-gray-700 rounded-lg p-1.5 min-h-[60px] max-h-[260px] overflow-y-auto">
+                  {/* Groups */}
+                  {benchGroups.map((group, gIdx) => {
+                    const groupCollapsed = isGroupCollapsed(group.name)
+                    const isUngrouped = group.name === null
 
+                    const renderChip = (item) => {
+                      const i = item.idx
                       const norm = normalizeTag(item.text)
                       const isUsedFixed = activeTags.fixed.has(norm)
                       const isUsedDP = activeTags.dp.has(norm)
                       const isUsed = isUsedFixed || isUsedDP
                       const isSelected = selectedChips.has(i)
                       const isDragging = dragIndex === i
-
+                      const isSystemDefault = systemDefaultSet.has(norm)
                       return (
-                        <button
+                        <BenchChip
                           key={`${item.text}-${i}`}
-                          draggable
+                          text={item.text}
+                          isUsedFixed={isUsedFixed}
+                          isUsedDP={isUsedDP}
+                          isSelected={isSelected}
+                          isDragging={isDragging}
+                          isSensitive={!!item.isSensitive}
+                          isSystemDefault={isSystemDefault}
+                          translator={translator}
                           onDragStart={(e) => handleDragStart(e, i)}
                           onDragOver={handleDragOver}
                           onDrop={(e) => handleDrop(e, i)}
                           onDragEnd={handleDragEnd}
                           onClick={(e) => isUsed ? removeTagFromValue(item.text) : handleBenchTagClick(item.text, i, e)}
-                          className={`text-xs px-1.5 py-0.5 rounded transition-colors whitespace-nowrap leading-tight select-none cursor-pointer ${
-                            isDragging
-                              ? 'opacity-40 bg-blue-600/30 text-blue-300'
-                              : isSelected
-                                ? 'bg-blue-600/40 text-blue-200 ring-1 ring-blue-400'
-                                : isUsedDP
-                                  ? 'ring-1 ring-amber-400/60 bg-amber-900/20 text-amber-300 hover:ring-red-400/60 hover:bg-red-900/20 hover:text-red-300'
-                                : isUsedFixed
-                                  ? 'ring-1 ring-green-400/60 bg-green-900/20 text-green-300 hover:ring-red-400/60 hover:bg-red-900/20 hover:text-red-300'
-                                  : 'bg-gray-700/60 hover:bg-blue-600/40 hover:text-blue-200 text-gray-400'
-                          }`}
-                          title={
-                            isUsedDP ? `DP candidate - Click to remove: ${item.text}` :
-                            isUsedFixed ? `Active - Click to remove: ${item.text}` :
-                            isSelected ? 'Click to insert selected, Shift+Click to deselect' :
-                            'Click to add, Shift+Click to multi-select, Drag to reorder'
-                          }
-                        >
-                          {isUsedDP ? `◇ ${item.text}` : isUsedFixed ? `✓ ${item.text}` : item.text}
-                        </button>
+                        />
                       )
-                    })}
-                  </div>
+                    }
+
+                    const groupActiveItems = group.items.filter(it => {
+                      if (it.type !== 'tag') return false
+                      const n = normalizeTag(it.text)
+                      return activeTags.fixed.has(n) || activeTags.dp.has(n)
+                    })
+
+                    return (
+                      <div key={`group-${gIdx}`} className={isUngrouped ? '' : 'mb-1'}>
+                        {/* Group header */}
+                        {!isUngrouped && (
+                          <div
+                            role="button"
+                            onClick={() => toggleGroup(group.name)}
+                            className="flex items-center flex-wrap gap-1 pt-1 pb-0.5 px-1 select-none cursor-pointer hover:bg-white/[0.03] rounded transition-colors"
+                          >
+                            <span className="text-[10px] text-zinc-500 w-3 flex-shrink-0">{groupCollapsed ? '▶' : '▼'}</span>
+                            <span className={`text-[11px] leading-none font-bold ${
+                              group.isSensitive ? 'text-pink-300' : 'text-zinc-400'
+                            }`}>{group.name}</span>
+                            {groupCollapsed && groupActiveItems.length > 0 && (
+                              <span
+                                className="flex flex-wrap gap-0.5 ml-1"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {groupActiveItems.map(renderChip)}
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Group body: buckets */}
+                        {(isUngrouped || !groupCollapsed) && group.buckets.map((bucket, bIdx) => {
+                          const tagItems = bucket.items.filter(it => it.type === 'tag')
+                          const activeItems = tagItems.filter(it => {
+                            const n = normalizeTag(it.text)
+                            return activeTags.fixed.has(n) || activeTags.dp.has(n)
+                          })
+                          const candidateItems = tagItems.filter(it => {
+                            const n = normalizeTag(it.text)
+                            return !(activeTags.fixed.has(n) || activeTags.dp.has(n))
+                          })
+                          const expanded = isBucketExpanded(group.name, bucket.sublabel, bIdx)
+                          const hasMore = candidateItems.length > 0
+                          const showSublabel = bucket.sublabel !== null
+                          const isEmpty = tagItems.length === 0
+
+                          return (
+                            <div key={`bucket-${bIdx}`} className={`px-1 py-0.5 ${bucket.isSpacer ? 'mt-1.5' : ''}`}>
+                              {(showSublabel || activeItems.length > 0 || hasMore) && (
+                                <div className="flex items-center flex-wrap gap-0.5">
+                                  {showSublabel && (
+                                    <span className="flex items-center gap-1 mr-1 select-none">
+                                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                                        bucket.isSensitive ? 'bg-pink-500' : 'bg-zinc-500'
+                                      }`} />
+                                      <span className={`text-[11px] leading-none ${
+                                        bucket.isSensitive ? 'text-pink-400' : 'text-zinc-500'
+                                      }`}>{bucket.sublabel}</span>
+                                    </span>
+                                  )}
+                                  {/* Active chips inline */}
+                                  {activeItems.map(renderChip)}
+                                  {/* Expand/collapse toggle */}
+                                  {hasMore && (
+                                    <button
+                                      onClick={() => toggleBucket(group.name, bucket.sublabel, bIdx)}
+                                      className="text-[11px] leading-none text-zinc-600 hover:text-zinc-300 px-1 py-0.5 cursor-pointer"
+                                      title={expanded ? '折りたたむ' : `候補を表示（残り ${candidateItems.length}）`}
+                                    >
+                                      {expanded ? '«' : `» ${candidateItems.length}`}
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                              {/* Expanded candidates row */}
+                              {expanded && hasMore && (
+                                <div className={`flex flex-wrap gap-0.5 mt-0.5 ${showSublabel ? 'ml-3' : ''}`}>
+                                  {candidateItems.map(renderChip)}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })}
                   {/* Selected chips indicator */}
                   {selectedChips.size > 0 && (
                     <div className="mt-1.5 pt-1 border-t border-gray-700 flex items-center gap-1">
@@ -622,16 +773,27 @@ export default function PromptSection({ section, value, onChange, type, benchVal
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => {
-                      setBenchEditText(benchTextToFormatted(effectiveBench))
-                      setBenchEditMode(true)
-                    }}
-                    className="mt-1 text-[11px] text-gray-600 hover:text-gray-400 cursor-pointer text-left"
-                    title="ベンチを編集"
-                  >
-                    ✎ 編集
-                  </button>
+                  <div className="mt-1 flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setBenchEditText(benchTextToFormatted(effectiveBench))
+                        setBenchEditMode(true)
+                      }}
+                      className="text-[11px] text-gray-600 hover:text-gray-400 cursor-pointer"
+                      title="このセクションのベンチを編集"
+                    >
+                      ✎ 編集
+                    </button>
+                    {onOpenGlobalBench && (
+                      <button
+                        onClick={onOpenGlobalBench}
+                        className="text-[11px] text-gray-600 hover:text-blue-400 cursor-pointer"
+                        title="全セクションのベンチを一括編集"
+                      >
+                        一括編集
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             )}
@@ -641,3 +803,4 @@ export default function PromptSection({ section, value, onChange, type, benchVal
     </div>
   )
 }
+

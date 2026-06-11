@@ -1,6 +1,10 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import sectionsData from '../data/sections.json'
+import { parseAIOutput } from '../utils/promptParser'
+import { parseMarkdownPrompt } from '../utils/markdownPromptParser'
+
+// ── Template builders ────────────────────────────────────────────────────────
 
 const ANALYSIS_TEMPLATE = `# Portrait Prompt 構造化分析
 
@@ -52,8 +56,12 @@ Negative:
 ## 出力フォーマット
 
 以下の形式で出力。タグの追加・削除・並び替えはしない。空セクションは省略可。
+**回答全体を Markdown コードブロック（\`\`\`）で囲んで返してください。**
 
 \`\`\`
+### Title
+（シーンのタイトルを日本語で1行。例: 朝のカフェ / 夕暮れのビーチ）
+
 ### Quality & Technical
 masterpiece, best quality, ...
 
@@ -78,6 +86,113 @@ bad hands, extra fingers, ...
 （他のNegativeセクション）
 \`\`\``
 
+function dumpScene(scene) {
+  if (!scene) return '（シーンデータなし）'
+  const lines = []
+  lines.push('### Title')
+  lines.push(scene.title || '（タイトルなし）')
+  lines.push('')
+  if (scene.description) {
+    lines.push('### Description')
+    lines.push(scene.description)
+    lines.push('')
+  }
+  for (const s of sectionsData.positive) {
+    const v = (scene.sections?.[s.key] || '').trim()
+    if (!v) continue
+    lines.push(`### ${s.name}`)
+    lines.push(v)
+    lines.push('')
+  }
+  const hasNeg = sectionsData.negative.some(s => (scene.negativeSections?.[s.key] || '').trim())
+  if (hasNeg) {
+    lines.push('---')
+    lines.push('')
+    for (const s of sectionsData.negative) {
+      const v = (scene.negativeSections?.[s.key] || '').trim()
+      if (!v) continue
+      lines.push(`### Negative - ${s.name}`)
+      lines.push(v)
+      lines.push('')
+    }
+  }
+  return lines.join('\n').trimEnd()
+}
+
+const SCENE_OUTPUT_FORMAT = `## 出力フォーマット
+
+空セクション省略可。**回答全体を Markdown コードブロック（\`\`\`）で囲んで返してください。**
+
+\`\`\`
+### Title
+（シーンのタイトルを日本語で1行）
+
+### Quality & Technical
+masterpiece, best quality, ...
+
+### Face & Hair
+1girl, brown hair, ...
+
+（他の Positive セクション）
+
+BREAK
+
+### Environment & Lighting
+beach, sunset, ...
+
+---
+
+### Negative - General Quality
+worst quality, ...
+（他の Negative セクション）
+\`\`\``
+
+function buildPrevSceneTemplate(scene) {
+  return `# 前シーン生成
+
+## 起点シーン（アンカー）
+
+${dumpScene(scene)}
+
+## 指示
+
+- 上記シーンの「直前」にあたるシーン（時系列・状況として自然な流れ）を1つ生成
+- キャラクターの連続性を保持（Face & Hair / Body はなるべく同じタグで）
+- Outfit / Composition / Effects / Environment はストーリー進行に合わせて変えてよい
+- タグは英語のまま、\`(tag:weight)\` / \`{a|b|c}\` 記法はそのまま保持
+
+## セクション一覧（参考）
+
+Positive: ${sectionsData.positive.map(s => s.name).join(', ')}
+Negative: ${sectionsData.negative.map(s => s.name).join(', ')}
+
+${SCENE_OUTPUT_FORMAT}`
+}
+
+function buildNextSceneTemplate(scene) {
+  return `# 後シーン生成
+
+## 起点シーン（アンカー）
+
+${dumpScene(scene)}
+
+## 指示
+
+- 上記シーンの「直後」にあたるシーン（時系列・状況として自然な流れ）を1つ生成
+- キャラクターの連続性を保持（Face & Hair / Body はなるべく同じタグで）
+- Outfit / Composition / Effects / Environment はストーリー進行に合わせて変えてよい
+- タグは英語のまま、\`(tag:weight)\` / \`{a|b|c}\` 記法はそのまま保持
+
+## セクション一覧（参考）
+
+Positive: ${sectionsData.positive.map(s => s.name).join(', ')}
+Negative: ${sectionsData.negative.map(s => s.name).join(', ')}
+
+${SCENE_OUTPUT_FORMAT}`
+}
+
+// ── Icons ────────────────────────────────────────────────────────────────────
+
 function CloseIcon({ size = 16 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -96,98 +211,50 @@ function CopyIcon({ size = 14 }) {
   )
 }
 
-/**
- * Parse AI output (Markdown with ### headers) into sections/negative_sections.
- */
-function parseAIOutput(text) {
-  const sections = {}
-  const negativeSections = {}
-  let currentKey = null
-  let isNegative = false
-  let passedSeparator = false
+// ── Component ────────────────────────────────────────────────────────────────
 
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim()
-
-    // --- separator between Positive and Negative
-    if (trimmed === '---') {
-      passedSeparator = true
-      currentKey = null
-      continue
-    }
-
-    // Skip BREAK
-    if (trimmed === 'BREAK') { currentKey = null; continue }
-
-    // ### header
-    const headerMatch = trimmed.match(/^###\s+(.+)$/)
-    if (headerMatch) {
-      const name = headerMatch[1].trim()
-
-      // Check Negative headers: "Negative - General Quality" or just after ---
-      const negMatch = name.match(/^Negative\s*-\s*(.+)$/)
-      if (negMatch) {
-        isNegative = true
-        const negName = negMatch[1].trim()
-        const section = sectionsData.negative.find(s => s.name === negName)
-        currentKey = section ? section.key : null
-      } else {
-        const section = sectionsData.positive.find(s => s.name === name)
-        if (section) {
-          isNegative = false
-          currentKey = section.key
-        } else if (passedSeparator) {
-          // After ---, try matching as negative without prefix
-          const negSection = sectionsData.negative.find(s => s.name === name)
-          if (negSection) {
-            isNegative = true
-            currentKey = negSection.key
-          }
-        }
-      }
-      continue
-    }
-
-    // Skip markdown code block markers
-    if (trimmed.startsWith('```')) continue
-
-    // Accumulate content
-    if (currentKey) {
-      const target = isNegative ? negativeSections : sections
-      target[currentKey] = (target[currentKey] || '') + (target[currentKey] ? '\n' : '') + line
-    }
-  }
-
-  // Trim all values
-  for (const key of Object.keys(sections)) sections[key] = sections[key].trim()
-  for (const key of Object.keys(negativeSections)) negativeSections[key] = negativeSections[key].trim()
-
-  return { sections, negativeSections }
-}
-
-export default function PromptAnalysisModal({ onClose, onImport }) {
-  const [tab, setTab] = useState('template') // 'template' | 'import'
+export default function PromptAnalysisModal({
+  onClose,
+  onImport,
+  onImportAsNew,
+  hasContent = false,
+  initialTab = 'import',       // 'import' | 'template'
+  initialTemplate = 'analysis', // 'analysis' | 'prev' | 'next'
+  currentScene = null,          // { title, description, sections, negativeSections }
+}) {
+  const [tab, setTab] = useState(initialTab)
+  const [templateKind, setTemplateKind] = useState(initialTemplate)
   const [copied, setCopied] = useState(false)
   const [importText, setImportText] = useState('')
   const [preview, setPreview] = useState(null)
   const [parseError, setParseError] = useState(null)
+  // File tab state
+  const fileInputRef = useRef(null)
+  const [fileName, setFileName] = useState('')
+  const [filePreview, setFilePreview] = useState(null) // { title, description, sections, negativeSections, bench, warnings }
+  const [fileError, setFileError] = useState(null)
+  const [fileIncludeBench, setFileIncludeBench] = useState(false)
+
+  const template = useMemo(() => {
+    if (templateKind === 'prev') return buildPrevSceneTemplate(currentScene)
+    if (templateKind === 'next') return buildNextSceneTemplate(currentScene)
+    return ANALYSIS_TEMPLATE
+  }, [templateKind, currentScene])
+
+  const templateLabel = templateKind === 'prev' ? '前シーン生成'
+    : templateKind === 'next' ? '後シーン生成'
+    : 'プロンプト分析'
 
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(ANALYSIS_TEMPLATE)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(template)
     } catch {
       const ta = document.createElement('textarea')
-      ta.value = ANALYSIS_TEMPLATE
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      ta.value = template
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta)
     }
-  }, [])
+    setCopied(true); setTimeout(() => setCopied(false), 2000)
+  }, [template])
 
   const handleParse = useCallback(() => {
     if (!importText.trim()) return
@@ -209,69 +276,110 @@ export default function PromptAnalysisModal({ onClose, onImport }) {
     onClose()
   }, [preview, onImport, onClose])
 
+  const handleApplyAsNew = useCallback(() => {
+    if (!preview) return
+    onImportAsNew(preview)
+    onClose()
+  }, [preview, onImportAsNew, onClose])
+
+  const handleFileSelect = useCallback(async (file) => {
+    if (!file) return
+    setFileError(null)
+    setFilePreview(null)
+    setFileName(file.name)
+    try {
+      const text = await file.text()
+      const parsed = parseMarkdownPrompt(text)
+      const hasAny = Object.keys(parsed.sections).length > 0
+        || Object.keys(parsed.negativeSections).length > 0
+      if (!hasAny) {
+        setFileError('解析可能なセクションが見つかりませんでした。')
+        return
+      }
+      setFilePreview(parsed)
+      setFileIncludeBench(false) // default OFF per UX recommendation
+    } catch (err) {
+      setFileError(`ファイル読み込みエラー: ${err.message || err}`)
+    }
+  }, [])
+
+  const buildFilePayload = useCallback(() => {
+    if (!filePreview) return null
+    const payload = {
+      title: filePreview.title,
+      description: filePreview.description,
+      sections: filePreview.sections,
+      negativeSections: filePreview.negativeSections,
+    }
+    if (fileIncludeBench && filePreview.bench) payload.bench = filePreview.bench
+    return payload
+  }, [filePreview, fileIncludeBench])
+
+  const handleApplyFile = useCallback(() => {
+    const payload = buildFilePayload()
+    if (!payload) return
+    onImport(payload)
+    onClose()
+  }, [buildFilePayload, onImport, onClose])
+
+  const handleApplyFileAsNew = useCallback(() => {
+    const payload = buildFilePayload()
+    if (!payload) return
+    onImportAsNew(payload)
+    onClose()
+  }, [buildFilePayload, onImportAsNew, onClose])
+
+  const TABS = [
+    { id: 'import', label: '貼り付け' },
+    { id: 'file', label: 'ファイル (.md)' },
+    { id: 'template', label: 'テンプレート' },
+  ]
+
+  const TEMPLATE_KINDS = [
+    { id: 'analysis', label: 'プロンプト分析' },
+    { id: 'prev', label: '前シーン生成' },
+    { id: 'next', label: '後シーン生成' },
+  ]
+
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
       <div className="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-[680px] max-h-[85vh] flex flex-col mx-4">
-        {/* Header + Tabs */}
+        {/* Header + main tabs */}
         <div className="px-5 py-3.5 border-b border-gray-800">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold text-gray-200">プロンプト分析</h2>
-            <button onClick={onClose}
-              className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors cursor-pointer">
+            <h2 className="text-sm font-semibold text-gray-200">
+              プロンプトを読み込む
+              {tab === 'template' && (
+                <span className="text-gray-500 font-normal text-xs ml-2">— {templateLabel}</span>
+              )}
+            </h2>
+            <button onClick={onClose} className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors cursor-pointer">
               <CloseIcon />
             </button>
           </div>
           <div className="flex gap-4">
-            <button onClick={() => setTab('template')}
-              className={`text-xs font-medium pb-1 border-b-2 transition-colors cursor-pointer ${
-                tab === 'template' ? 'text-blue-400 border-blue-400' : 'text-gray-500 border-transparent hover:text-gray-400'
-              }`}>
-              テンプレート
-            </button>
-            <button onClick={() => setTab('import')}
-              className={`text-xs font-medium pb-1 border-b-2 transition-colors cursor-pointer ${
-                tab === 'import' ? 'text-blue-400 border-blue-400' : 'text-gray-500 border-transparent hover:text-gray-400'
-              }`}>
-              取り込み
-            </button>
+            {TABS.map(t => (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={`text-xs font-medium pb-1 border-b-2 transition-colors cursor-pointer ${
+                  tab === t.id ? 'text-blue-400 border-blue-400' : 'text-gray-500 border-transparent hover:text-gray-400'
+                }`}>
+                {t.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {tab === 'template' ? (
+        {/* ── 貼り付けタブ ─────────────────────────────────────── */}
+        {tab === 'import' && (
           <>
-            {/* Usage guide */}
-            <div className="px-5 py-2.5 bg-blue-950/20 border-b border-gray-800">
-              <ol className="list-decimal list-inside text-[11px] text-blue-300/70 space-y-0.5">
-                <li>下のテンプレートをコピー</li>
-                <li>Claude AI / ChatGPT に貼り付け、プロンプトを追記</li>
-                <li>AIの出力を「取り込み」タブに貼り付けて適用</li>
-              </ol>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-5 py-3">
-              <pre className="text-[11px] leading-relaxed text-gray-400 whitespace-pre-wrap font-mono bg-gray-950/50 rounded-lg p-4 border border-gray-800/50">
-                {ANALYSIS_TEMPLATE}
-              </pre>
-            </div>
-
-            <div className="px-5 py-3 border-t border-gray-800 flex justify-end">
-              <button onClick={handleCopy}
-                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
-                  copied ? 'bg-green-600/80 text-white' : 'bg-blue-600/80 hover:bg-blue-500/80 text-white'
-                }`}>
-                <CopyIcon size={13} />
-                {copied ? 'コピーしました' : 'テンプレートをコピー'}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Import tab */}
-            <div className="px-5 py-2.5 bg-blue-950/20 border-b border-gray-800">
-              <p className="text-[11px] text-blue-300/70">
-                AIの出力（### 見出し付きのテキスト）を貼り付けて、「解析」→「適用」で各セクションに取り込みます。
+            <div className={`px-5 py-2.5 border-b ${hasContent ? 'bg-amber-950/30 border-amber-800/40' : 'bg-blue-950/20 border-gray-800'}`}>
+              <p className={`text-[11px] ${hasContent ? 'text-amber-300' : 'text-blue-300/70'}`}>
+                {hasContent
+                  ? '⚠ 適用するとこのシーンのすべてのセクションが AIの出力で置き換えられます'
+                  : 'AIの出力（### 見出し付きのテキスト）を貼り付けて、「プレビュー」→「読み込む」でセクションに取り込みます。'
+                }
               </p>
             </div>
 
@@ -279,21 +387,27 @@ export default function PromptAnalysisModal({ onClose, onImport }) {
               <textarea
                 value={importText}
                 onChange={e => { setImportText(e.target.value); setPreview(null); setParseError(null) }}
-                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-xs text-gray-300 font-mono leading-relaxed focus:outline-none focus:border-blue-500 resize-none flex-1"
+                className="w-full bg-gray-950 border border-gray-700 rounded-lg p-3 text-xs text-gray-300 font-mono leading-relaxed focus:outline-none focus:border-blue-500 resize-none"
                 style={{ minHeight: '300px' }}
-                placeholder={"AIの出力をここに貼り付け...\n\n### Quality & Technical\nmasterpiece, best quality, ...\n\n### Face & Hair\n1girl, brown hair, ..."}
+                placeholder={"AIの出力をここに貼り付け...\n\n### Title\n朝のカフェ\n\n### Quality & Technical\nmasterpiece, best quality, ...\n\n### Face & Hair\n1girl, brown hair, ..."}
                 rows={8}
               />
 
               {parseError && (
-                <div className="bg-red-950/30 border border-red-800/50 rounded-lg p-3">
-                  <div className="text-[11px] text-red-400">{parseError}</div>
+                <div className="bg-red-950/30 border border-red-800/50 rounded-lg p-3 text-[11px] text-red-400">
+                  {parseError}
                 </div>
               )}
 
               {preview && (
                 <div className="bg-gray-950/50 border border-gray-800 rounded-lg p-3">
                   <div className="text-[11px] text-gray-400 font-medium mb-2">解析結果プレビュー:</div>
+                  {preview.title && (
+                    <div className="mb-2">
+                      <div className="text-[10px] text-gray-500 uppercase tracking-wider">タイトル</div>
+                      <div className="text-[12px] text-gray-100 font-medium">{preview.title}</div>
+                    </div>
+                  )}
                   {sectionsData.positive.map(s => {
                     const val = preview.sections[s.key]
                     if (!val) return null
@@ -328,9 +442,196 @@ export default function PromptAnalysisModal({ onClose, onImport }) {
                 className="px-4 py-2 text-xs font-medium rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default">
                 {preview ? '✓ プレビュー済み' : 'プレビュー'}
               </button>
+              {onImportAsNew && (
+                <button onClick={handleApplyAsNew} disabled={!preview}
+                  className="px-4 py-2 text-xs font-medium rounded-lg bg-green-700/80 hover:bg-green-600/80 text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default">
+                  新規シーンとして作成
+                </button>
+              )}
               <button onClick={handleApply} disabled={!preview}
-                className="px-4 py-2 text-xs font-medium rounded-lg bg-blue-600/80 hover:bg-blue-500/80 text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default">
-                適用
+                className={`px-4 py-2 text-xs font-medium rounded-lg text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default ${
+                  hasContent ? 'bg-amber-600/80 hover:bg-amber-500/80' : 'bg-blue-600/80 hover:bg-blue-500/80'
+                }`}>
+                {hasContent ? '上書きして適用' : '読み込む'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── ファイルタブ ─────────────────────────────────────── */}
+        {tab === 'file' && (
+          <>
+            <div className="px-5 py-2.5 border-b bg-blue-950/20 border-gray-800">
+              <p className="text-[11px] text-blue-300/70">
+                <code>Markdown形式で Export</code> で保存したファイル (.md) を読み込みます。
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-3 space-y-3">
+              <div
+                onDragOver={e => { e.preventDefault() }}
+                onDrop={e => {
+                  e.preventDefault()
+                  const f = e.dataTransfer.files?.[0]
+                  if (f) handleFileSelect(f)
+                }}
+                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-gray-700 hover:border-blue-500/50 rounded-lg p-6 text-center cursor-pointer transition-colors"
+              >
+                <div className="text-xs text-gray-400 mb-1">
+                  {fileName ? `選択中: ${fileName}` : '.md ファイルをドロップ、またはクリックして選択'}
+                </div>
+                {!fileName && <div className="text-[10px] text-gray-600">対応形式: PPB が出力した Markdown</div>}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".md,text/markdown"
+                onChange={e => handleFileSelect(e.target.files?.[0])}
+                className="hidden"
+              />
+
+              {fileError && (
+                <div className="bg-red-950/30 border border-red-800/50 rounded-lg p-3 text-[11px] text-red-400">
+                  {fileError}
+                </div>
+              )}
+
+              {filePreview && (
+                <>
+                  <div className="bg-gray-950/50 border border-gray-800 rounded-lg p-3">
+                    <div className="text-[11px] text-gray-400 font-medium mb-2">解析結果プレビュー:</div>
+                    {filePreview.title && (
+                      <div className="mb-2">
+                        <div className="text-[10px] text-gray-500 uppercase tracking-wider">タイトル</div>
+                        <div className="text-[12px] text-gray-100 font-medium">{filePreview.title}</div>
+                      </div>
+                    )}
+                    {filePreview.description && (
+                      <div className="mb-2">
+                        <div className="text-[10px] text-gray-500 uppercase tracking-wider">説明</div>
+                        <div className="text-[11px] text-gray-300">{filePreview.description}</div>
+                      </div>
+                    )}
+                    {sectionsData.positive.map(s => {
+                      const val = filePreview.sections[s.key]
+                      if (!val) return null
+                      return (
+                        <div key={s.key} className="mb-1.5">
+                          <div className="text-[10px] text-blue-400">{s.name}</div>
+                          <div className="text-[11px] text-gray-300 font-mono whitespace-pre-wrap">{val}</div>
+                        </div>
+                      )
+                    })}
+                    {Object.keys(filePreview.negativeSections).length > 0 && (
+                      <>
+                        <div className="border-t border-gray-800 my-2" />
+                        {sectionsData.negative.map(s => {
+                          const val = filePreview.negativeSections[s.key]
+                          if (!val) return null
+                          return (
+                            <div key={s.key} className="mb-1.5">
+                              <div className="text-[10px] text-red-400">{s.name}</div>
+                              <div className="text-[11px] text-gray-300 font-mono whitespace-pre-wrap">{val}</div>
+                            </div>
+                          )
+                        })}
+                      </>
+                    )}
+                  </div>
+
+                  {filePreview.bench && (
+                    <label className="flex items-start gap-2 cursor-pointer bg-amber-950/20 border border-amber-800/30 rounded-lg p-3">
+                      <input
+                        type="checkbox"
+                        checked={fileIncludeBench}
+                        onChange={e => setFileIncludeBench(e.target.checked)}
+                        className="mt-0.5 cursor-pointer"
+                      />
+                      <div>
+                        <div className="text-xs text-amber-200">ベンチデータも読み込む（現在のグローバルベンチを上書き）</div>
+                        <div className="text-[10px] text-amber-300/60 mt-0.5">
+                          ベンチはアプリ全体で共有されます。チェックすると現在の設定が失われます。
+                          ファイルには {Object.keys(filePreview.bench).length} セクション分のベンチが含まれます。
+                        </div>
+                      </div>
+                    </label>
+                  )}
+
+                  {filePreview.warnings && filePreview.warnings.length > 0 && (
+                    <div className="bg-yellow-950/20 border border-yellow-800/30 rounded-lg p-3">
+                      <div className="text-[11px] text-yellow-300/80 font-medium mb-1">⚠ 警告:</div>
+                      <ul className="text-[10px] text-yellow-300/60 list-disc list-inside space-y-0.5">
+                        {filePreview.warnings.map((w, i) => <li key={i}>{w}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-800 flex justify-end gap-2">
+              {onImportAsNew && (
+                <button onClick={handleApplyFileAsNew} disabled={!filePreview}
+                  className="px-4 py-2 text-xs font-medium rounded-lg bg-green-700/80 hover:bg-green-600/80 text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default">
+                  新規シーンとして作成
+                </button>
+              )}
+              <button onClick={handleApplyFile} disabled={!filePreview}
+                className={`px-4 py-2 text-xs font-medium rounded-lg text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default ${
+                  hasContent ? 'bg-amber-600/80 hover:bg-amber-500/80' : 'bg-blue-600/80 hover:bg-blue-500/80'
+                }`}>
+                {hasContent ? '上書きして適用' : '読み込む'}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── テンプレートタブ ─────────────────────────────────── */}
+        {tab === 'template' && (
+          <>
+            {/* Sub-tab selector */}
+            <div className="px-5 pt-3 pb-0 border-b border-gray-800 flex gap-3 bg-gray-900/50">
+              {TEMPLATE_KINDS.map(k => (
+                <button key={k.id} onClick={() => setTemplateKind(k.id)}
+                  className={`text-[11px] font-medium pb-2 border-b-2 transition-colors cursor-pointer ${
+                    templateKind === k.id
+                      ? 'text-gray-200 border-gray-400'
+                      : 'text-gray-600 border-transparent hover:text-gray-400'
+                  }`}>
+                  {k.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Guide */}
+            <div className="px-5 py-2.5 bg-blue-950/20 border-b border-gray-800">
+              <ol className="list-decimal list-inside text-[11px] text-blue-300/70 space-y-0.5">
+                <li>下のテンプレートをコピー</li>
+                <li>Claude AI / ChatGPT に貼り付け{templateKind === 'analysis' ? '、プロンプトを追記' : ''}</li>
+                <li>AIの出力を「取り込み」タブに貼り付けて適用</li>
+              </ol>
+            </div>
+
+            {(templateKind === 'prev' || templateKind === 'next') && !currentScene?.title && !Object.values(currentScene?.sections || {}).some(v => v?.trim()) && (
+              <div className="px-5 py-2 bg-amber-950/30 border-b border-amber-800/40 text-[11px] text-amber-300">
+                ⚠ 現在のシーンに内容がありません。起点シーンを開いてから使用してください。
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto px-5 py-3">
+              <pre className="text-[11px] leading-relaxed text-gray-400 whitespace-pre-wrap font-mono bg-gray-950/50 rounded-lg p-4 border border-gray-800/50">
+                {template}
+              </pre>
+            </div>
+
+            <div className="px-5 py-3 border-t border-gray-800 flex justify-end">
+              <button onClick={handleCopy}
+                className={`flex items-center gap-1.5 px-4 py-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
+                  copied ? 'bg-green-600/80 text-white' : 'bg-blue-600/80 hover:bg-blue-500/80 text-white'
+                }`}>
+                <CopyIcon size={13} />
+                {copied ? 'コピーしました' : 'テンプレートをコピー'}
               </button>
             </div>
           </>
