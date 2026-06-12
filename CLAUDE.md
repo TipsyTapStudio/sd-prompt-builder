@@ -134,8 +134,11 @@ tag1, tag2       → 通常タグ（チップ表示）
 
 ## 次回やるべきこと
 
+**→ 次セッションの具体的な実装指示は `NEXT_SESSION.md` を参照（右ペイン新設 + GitHub Pages デプロイ）**
+
 ### 優先度高
-- GitHub Pages デプロイ設定
+- エディタ右ペイン「生成結果パネル」新設（NEXT_SESSION.md に詳細）
+- GitHub Pages デプロイ設定（NEXT_SESSION.md に詳細）
 - セクション名の曖昧マッチ改善（分析取り込みで "Quality and Technical" vs "Quality & Technical" が一致しない問題）
 
 ### 優先度中
