@@ -189,3 +189,57 @@
   optional chaining が無いから）
 - Tailwind v4 の `scale-110` は `transform` ではなく独立した `scale` プロパティを
   使う（computed `transform` は `none` のまま。ぼかしの `filter` で可視確認すべき）
+
+## 2026-06-12 Session: エディタ右ペイン「生成結果パネル」
+
+### 経緯
+「このプロンプトでどんな絵が出たか」を見ながら編集するのが本来の使い方なのに、
+生成結果ギャラリーが最下部にあり動線が遠かった。常設の右ペインに引っ越して
+ファーストビューで見えるようにする（`NEXT_SESSION.md` タスク1）。
+
+### 設計判断（UX レビュー確定事項）
+- **下部 GalleryPanel は廃止し右ペインへ統合**（同じ情報の住処を 2 つ作らない）。
+  ファイル選択・空状態ドロップゾーン・ぼかしロジックもペインへ移設。全画面
+  DropOverlay は独立で不変
+- **幅 320px（`w-80`）、トグルはエディタ sticky ヘッダー右端**。折りたたみ時は
+  幅 40px の縦レール（アイコン + 枚数）。クリックで再展開
+- **狭幅（<1280px）は既定で閉じる**。matchMedia で「狭幅へ遷移したときだけ」
+  自動で閉じる（自動展開はしない／永続化もしない＝明示トグルのみ保存）。
+  CSS の responsive 強制だと 1366px ノートで開けなくなるため JS で実装
+- **パラメータ表示は詳細モーダルと同じ「Seed 行 + 2 列グリッド + その他(N) details」**。
+  ドリフト防止のため `ImageParams.jsx`（PromptBlock / SeedCopyButton / ParamSummary）
+  と `utils/sdParams.js` に共通化し、ImageDetailModal も流用に切替
+- **空状態は 2 種**: ①現在プロンプトあり・画像0枚 → ドロップゾーン + ファイル選択、
+  ②未保存の新規エディタ → 「保存すると登録できます」の静かな案内（ボタンなし）
+
+### 実装した機能
+- `GenerationResultPanel.jsx`（新規）: 大プレビュー（クリックで拡大モーダル）+
+  ストリップ（クリックで選択切替、既定=最新）+ 画像内 P/N（コピー）+ Seed/Steps/
+  Sampler/Model 等。ぼかしは 1 クリック解除（解除済み大プレビューのクリックで拡大）。
+  ペイン全体がドロップ対象。`revealed` Set はペインに保持
+- `ImageParams.jsx` / `utils/sdParams.js`（新規）: 共有表示部品 + パース
+- `utils/resultPane.js`（新規）: 折りたたみ状態の永続化 + 狭幅判定（コンポーネント
+  ファイルは Fast Refresh 制約で「コンポーネントのみ export」にする必要があり分離）
+- `ImageDetailModal.jsx`: ローカルの parseSettingsPairs / PromptBlock / SeedCopyButton
+  を削除し共有部品へ置換（挙動不変）
+- `App.jsx`: エディタを横 flex 化（メイン `flex-1 min-w-0` + ペイン）、ヘッダーに
+  トグル追加、`result-pane-collapsed` 状態 + matchMedia 自動折りたたみ、旧
+  GalleryPanel 削除。OutputPanel（sticky bottom）はメインカラム内に維持
+- `GalleryPanel.jsx` 削除
+
+### 検証（プレビュー + 合成データ）
+- 現在プロンプトへ canvas 製ダミー 3 枚（成人被写体: 通常/NSFW/パラメータなし）を
+  put → 検証後に `__synthetic` を全削除
+- 確認: 大プレビュー + ストリップ + 画像内 P/N + Seed 行 + 主要グリッド（Steps/Sampler/
+  CFG/Size/Model/Clip skip）+ その他(2) / 既定選択=最新 / ストリップで選択切替 /
+  NSFW のぼかし→1 クリック解除（選択せず）→2 クリック目で選択 / 大プレビュー
+  クリックで詳細モーダル（リファクタ後も正常）/ ヘッダートグルで開閉 + 永続化 /
+  レール枚数表示 / 空状態（ドロップゾーン + ファイル選択）/ OutputPanel・エディタ
+  非破壊 / コンソールエラーなし / build 成功 / 変更ファイル lint クリーン
+
+### 学び
+- `react-refresh/only-export-components`: コンポーネント既定 export のファイルから
+  プレーン関数も export すると lint エラー。永続化ヘルパーは別 util に切り出す
+- flex 化したエディタ右ペインの独立スクロールは `flex-shrink-0 self-start
+  sticky top-0 h-screen overflow-y-auto`。メインカラムは `min-w-0` 必須（既定
+  `min-width:auto` だと縮まずあふれる）

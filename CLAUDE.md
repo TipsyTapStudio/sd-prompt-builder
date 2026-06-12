@@ -48,8 +48,9 @@ src/
 │   ├── HighlightOverlay.jsx      # テキストエリアのシンタックスハイライト（コメント・非ベンチタグ）
 │   ├── OutputPanel.jsx           # プレビューパネル（Positive/Negative 上下表示、sticky bottom）
 │   ├── BreakDivider.jsx          # BREAK の視覚的区切り
-│   ├── GalleryPanel.jsx          # 生成結果ギャラリー（サムネイルストリップ、ぼかし）
-│   ├── ImageDetailModal.jsx      # 画像詳細モーダル（パラメータ表示、Seed コピー）
+│   ├── GenerationResultPanel.jsx # エディタ右ペイン（生成結果: 大プレビュー + ストリップ + 画像内 P/N・パラメータ、折りたたみ可）
+│   ├── ImageParams.jsx           # 画像内 P/N・パラメータの共有表示部品（PromptBlock / SeedCopyButton / ParamSummary）
+│   ├── ImageDetailModal.jsx      # 画像詳細モーダル（拡大 + ImageParams 流用）
 │   ├── DropOverlay.jsx           # ファイルドラッグ中の全画面ドロップオーバーレイ
 │   ├── StoryboardView.jsx        # ストーリーボード（シーンカード一覧）
 │   ├── SceneCard.jsx             # シーンカード
@@ -73,6 +74,8 @@ src/
 │   ├── markdownPromptParser.js   # Markdown インポートのパース
 │   ├── imageMetadata.js          # 画像内 SD パラメータ抽出（PNG tEXt / JPEG EXIF）
 │   ├── imageDb.js                # ギャラリー用 IndexedDB ラッパー + サムネイル生成
+│   ├── sdParams.js               # 画像内パラメータ文字列のパース（parseSettingsPairs / MAIN_PARAM_KEYS）
+│   ├── resultPane.js             # 右ペイン折りたたみ状態の永続化 + 狭幅判定
 │   ├── sensitive.js              # センシティブ判定（完全一致 + 部分一致）・ぼかし設定
 │   └── tagTranslationCache.js    # タグ翻訳キャッシュ
 ├── data/
@@ -91,6 +94,7 @@ scripts/
 - **サイドバー**（260px、スライドイン/アウト）: プロンプト一覧（日付グルーピング）、新規作成、Import、分析テンプレート、Export、設定
 - **ヘッダー**（sticky top）: サイドバー開閉、タイトル▼メニュー、翻訳ステータス、保存ボタン（3状態）
 - **メインコンテンツ**: セクション入力（2ペイン: テキスト + ベンチゾーン）
+- **生成結果右ペイン**（エディタビューのみ、320px、折りたたみ可）: 選択画像の大プレビュー + サムネイルストリップ + 画像内 P/N・パラメータ。ヘッダー右端のトグルで開閉（狭幅 <1280px は既定で閉じる）。下部の旧 GalleryPanel は廃止しここへ統合
 - **プレビューパネル**: Positive/Negative 上下表示、編集可能、コピーボタン
 
 ### データ設計
@@ -103,7 +107,8 @@ LocalStorage:
 - `sd-prompt-builder:folders` / `:folder-state` — フォルダ定義 / 開閉状態
 - `sd-prompt-builder:tag-translations` — タグ翻訳キャッシュ
 - `sd-prompt-builder:sensitive-keywords` — センシティブ判定キーワード
-- `sd-prompt-builder:bench-collapsed` / `:gallery-collapsed` — 折りたたみ状態
+- `sd-prompt-builder:bench-collapsed` / `:gallery-collapsed` — 折りたたみ状態（`:gallery-collapsed` は旧 GalleryPanel 用で現在未使用、互換のため残置）
+- `sd-prompt-builder:result-pane-collapsed` — エディタ右ペインの折りたたみ状態（未設定時は狭幅で既定 closed）
 - `sd-prompt-builder:gallery-blur` — ギャラリーぼかしモード（keyword/all/off）
 
 IndexedDB（DB 名 `sd-prompt-builder-images`、ストア `images`、index: promptId）:
@@ -126,7 +131,8 @@ tag1, tag2       → 通常タグ（チップ表示）
 - Negative に BREAK は入れない
 - localStorage のキー名は変更しない（後方互換性）
 - モーダルは必ず createPortal で document.body にレンダリング
-- GalleryPanel は OutputPanel（sticky bottom-0 z-40）より DOM 上流に置く（下だと隠れる）
+- エディタは横 flex（メイン `flex-1 min-w-0` + 右ペイン `flex-shrink-0 w-80 sticky top-0 h-screen`）。OutputPanel（sticky bottom-0 z-40、`-mx-4 px-4`）はメインカラム内に留める
+- 画像内 P/N・パラメータ表示は GenerationResultPanel と ImageDetailModal で `ImageParams.jsx` を共有（重複・ドリフト防止）。`parseSettingsPairs` は `utils/sdParams.js`
 - DropOverlay は `Files` ドラッグ型のみに反応させる（内部 DnD の `text/x-ppb-scene` / `text/plain` と分離）
 - センシティブ判定: ベンチのメタラベルは `matchesSensitive`（完全一致）、生プロンプト文字列は `textContainsSensitive`（部分一致）を使う
 - SceneCard は代表画像サムネイル（最新登録）を最上部に全幅表示。一括取得は `imageDb.js` の `getLatestImageForPrompts(ids)`（promptId index を keyCursor 1 パス走査）。ぼかし解除の `revealed` Set は StoryboardView 側に保持（カード再描画で消えないため）
@@ -134,15 +140,12 @@ tag1, tag2       → 通常タグ（チップ表示）
 
 ## 次回やるべきこと
 
-**→ 次セッションの具体的な実装指示は `NEXT_SESSION.md` を参照（右ペイン新設 + GitHub Pages デプロイ）**
-
 ### 優先度高
-- エディタ右ペイン「生成結果パネル」新設（NEXT_SESSION.md に詳細）
-- GitHub Pages デプロイ設定（NEXT_SESSION.md に詳細）
 - セクション名の曖昧マッチ改善（分析取り込みで "Quality and Technical" vs "Quality & Technical" が一致しない問題）
 
 ### 優先度中
-- ギャラリー v2: 「画像のプロンプトを取り込む」ボタン（PromptAnalysisModal 連携）、差分表示、シーンカード直接ドロップ、重複登録デデュープ
+- 「画像のプロンプトを取り込む」ボタン（右ペインの画像内 P/N → PromptAnalysisModal 取り込みフロー。今回ストレッチゴールとして見送り）
+- ギャラリー v2: 差分表示（画像内 vs 現在プロンプト）、シーンカード直接ドロップ、重複登録デデュープ
 - テキスト装飾ツールバー（ヘッダーにプレースホルダー設置済み）
 - チップ UI + ドラッグ操作（Stream B-2 として計画済み）
 - プリセットセット切替（フォト系 / イラスト系）

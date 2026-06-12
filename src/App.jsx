@@ -9,7 +9,8 @@ import PromptAnalysisModal from './components/PromptAnalysisModal'
 import SettingsModal from './components/SettingsModal'
 import StoryboardView from './components/StoryboardView'
 import ConsistencyCheckModal from './components/ConsistencyCheckModal'
-import GalleryPanel from './components/GalleryPanel'
+import GenerationResultPanel from './components/GenerationResultPanel'
+import { readResultPaneCollapsed, writeResultPaneCollapsed, NARROW_QUERY } from './utils/resultPane'
 import DropOverlay from './components/DropOverlay'
 import { usePromptBuilder } from './hooks/usePromptBuilder'
 import { useStorage, saveDraft, loadDraft, clearDraft } from './hooks/useStorage'
@@ -231,6 +232,27 @@ export default function App() {
   const handleSetGalleryBlurMode = useCallback((mode) => {
     setGalleryBlurMode(mode)
     setGalleryBlurModeState(getGalleryBlurMode())
+  }, [])
+
+  // --- Editor right pane (generation results) collapse state ---
+  const [resultPaneCollapsed, setResultPaneCollapsed] = useState(readResultPaneCollapsed)
+  const toggleResultPane = useCallback(() => {
+    setResultPaneCollapsed(prev => { writeResultPaneCollapsed(!prev); return !prev })
+  }, [])
+  const expandResultPane = useCallback(() => {
+    writeResultPaneCollapsed(false); setResultPaneCollapsed(false)
+  }, [])
+  const collapseResultPane = useCallback(() => {
+    writeResultPaneCollapsed(true); setResultPaneCollapsed(true)
+  }, [])
+  // Auto-collapse when the viewport crosses into narrow (never auto-expand, and
+  // don't persist — only explicit toggles write the preference).
+  useEffect(() => {
+    let mql
+    try { mql = window.matchMedia(NARROW_QUERY) } catch { return undefined }
+    const onChange = (e) => { if (e.matches) setResultPaneCollapsed(true) }
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
   }, [])
 
   // --- Image counts per prompt (sidebar attachment indicator) ---
@@ -622,6 +644,7 @@ export default function App() {
     localStorage.removeItem('sd-prompt-builder:sensitive-keywords')
     localStorage.removeItem('sd-prompt-builder:bench-collapsed')
     localStorage.removeItem('sd-prompt-builder:gallery-collapsed')
+    localStorage.removeItem('sd-prompt-builder:result-pane-collapsed')
     localStorage.removeItem('sd-prompt-builder:gallery-blur')
     try { await deleteImageDatabase() } catch { /* proceed with reload */ }
     window.location.reload()
@@ -734,6 +757,7 @@ export default function App() {
           blurMode={galleryBlurMode}
         />
       ) : (
+      <div className="flex-1 min-w-0 flex">
       <div className="flex-1 min-w-0 pb-16">
         {/* Header */}
         <div className="sticky top-0 z-40 bg-gray-950 border-b border-gray-800">
@@ -787,8 +811,22 @@ export default function App() {
                 )}
               </div>
             </div>
-            {/* Right: translation status + save */}
+            {/* Right: result pane toggle + translation status + save */}
             <div className="flex items-center gap-2 flex-shrink-0">
+              <button onClick={toggleResultPane}
+                className={`p-1 rounded transition-colors cursor-pointer ${
+                  !resultPaneCollapsed
+                    ? 'text-emerald-400 bg-emerald-600/10'
+                    : 'text-gray-500 hover:text-gray-300'
+                }`}
+                title={resultPaneCollapsed ? '生成結果パネルを開く' : '生成結果パネルを閉じる'}
+                aria-label="生成結果パネル">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" />
+                  <circle cx="8.5" cy="8.5" r="1.5" />
+                  <path d="M21 15l-5-5L5 21" />
+                </svg>
+              </button>
               <button onClick={() => setTranslationProvider(prev =>
                 prev === PROVIDERS.OFF ? PROVIDERS.MYMEMORY : PROVIDERS.OFF
               )}
@@ -836,17 +874,6 @@ export default function App() {
                 onOpenGlobalBench={() => setSettingsOpen(true)} />
             )
           })}
-
-          {/* 生成結果ギャラリー — OutputPanel (sticky bottom) より DOM 上流に置くこと */}
-          <GalleryPanel
-            images={gallery.images}
-            busy={gallery.busy}
-            onAddFiles={handleGalleryFiles}
-            onRemoveImage={gallery.removeImage}
-            sensitiveKeywords={sensitiveKeywords}
-            blurMode={galleryBlurMode}
-            hasPrompt={!!currentId || hasEditorContent}
-          />
         </div>
 
         <div className="max-w-5xl mx-auto px-4">
@@ -857,6 +884,19 @@ export default function App() {
             sections={sections} negativeSections={negativeSections}
             onSectionsUpdate={setSections} onNegativeSectionsUpdate={setNegativeSections} />
         </div>
+      </div>
+      <GenerationResultPanel
+        images={gallery.images}
+        busy={gallery.busy}
+        onAddFiles={handleGalleryFiles}
+        onRemoveImage={gallery.removeImage}
+        sensitiveKeywords={sensitiveKeywords}
+        blurMode={galleryBlurMode}
+        hasPrompt={!!currentId || hasEditorContent}
+        collapsed={resultPaneCollapsed}
+        onExpand={expandResultPane}
+        onCollapse={collapseResultPane}
+      />
       </div>
       )}
 
