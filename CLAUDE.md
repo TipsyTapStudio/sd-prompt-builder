@@ -13,7 +13,11 @@
 - Tailwind CSS v4
 - LocalStorage（永続化 + Draft 自動保存）
 - 翻訳: Chrome Translator API / MyMemory API（手動ボタン式）
-- デプロイ: GitHub Pages（未設定）
+- デプロイ: GitHub Pages（設定済み）。master push で `.github/workflows/deploy.yml` が
+  `vite build --base=/sd-prompt-builder/` → Pages へ自動デプロイ。
+  公開 URL: https://tipsytapstudio.github.io/sd-prompt-builder/
+  （※デプロイ版はオリジンが別なので localStorage/IndexedDB はローカル版と非共有。
+  データ移行は Export/Import を使う）
 
 ## 開発ルール
 

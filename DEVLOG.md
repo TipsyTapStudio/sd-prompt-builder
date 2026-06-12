@@ -243,3 +243,34 @@
 - flex 化したエディタ右ペインの独立スクロールは `flex-shrink-0 self-start
   sticky top-0 h-screen overflow-y-auto`。メインカラムは `min-w-0` 必須（既定
   `min-width:auto` だと縮まずあふれる）
+
+## 2026-06-12 Session: GitHub Pages デプロイ
+
+### 経緯
+`NEXT_SESSION.md` タスク2。`https://tipsytapstudio.github.io/sd-prompt-builder/`
+でアプリが動く状態にする。
+
+### 重要な判断（ブリーフとの差異）
+- ブリーフは「public 想定」だったが、実際のリポジトリは **private** だった。
+  GitHub Pages は private リポジトリだと有料プランが必要で、無料プランでは
+  public のみ。リポジトリの公開/非公開の切替はアクセス権限変更にあたるため
+  エージェントからは行わず、**ユーザーが手動で public 化**してから着手した
+
+### 実装
+- `.github/workflows/deploy.yml`（新規）: master push / 手動実行で
+  `actions/checkout` → `setup-node@v4`(Node 22, npm cache) → `npm ci` →
+  `npm run build -- --base=/sd-prompt-builder/` → `configure-pages` →
+  `upload-pages-artifact`(dist) → `deploy-pages`。permissions は
+  `pages: write` / `id-token: write`、concurrency group `pages`
+- **base パスはワークフロー内 `--base` で指定**（vite.config を固定変更しない＝
+  ローカル dev は `/` のまま）。ビルド後 `dist/index.html` の参照が
+  `/sd-prompt-builder/assets/...` になることをローカルで確認
+- Pages 有効化は `gh api -X POST repos/.../pages -f build_type=workflow`
+  （Source = GitHub Actions）。SPA でルーティングは無い（状態は localStorage）ので
+  404 フォールバックや `.nojekyll` は不要（Actions デプロイは Jekyll を通さない）
+
+### 注意（ユーザー向けにも明記）
+- デプロイ版とローカル版は **オリジンが異なる**ため localStorage / IndexedDB を
+  共有しない。プロンプトやギャラリーのデータ移行は Export/Import で行う
+- リポジトリを public 化したので、ソースと履歴も公開された（コードに秘匿情報は
+  無いことを確認済み: API キー無し、生成画像はリポジトリ外の Drive 管理）
