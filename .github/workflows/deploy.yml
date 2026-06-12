@@ -25,7 +25,10 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      # `npm install` (not `npm ci`): the lockfile is generated on Windows and
+      # can't record the Linux-only transitive deps of @tailwindcss/oxide's
+      # wasm fallback (@emnapi/*), which `npm ci`'s strict sync check rejects.
+      - run: npm install --no-audit --no-fund
       # Subpath deploy (tipsytapstudio.github.io/sd-prompt-builder/) — set base
       # here rather than in vite.config so local dev stays at "/".
       - run: npm run build -- --base=/sd-prompt-builder/
